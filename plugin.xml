@@ -1,0 +1,57 @@
+<?xml version='1.0' encoding='utf-8'?>
+<plugin id="cordova-plugin-media-editor" version="1.1.3" xmlns="http://apache.org/cordova/ns/plugins/1.0" xmlns:android="http://schemas.android.com/apk/res/android">
+    <name>CTYMediaEditor</name>
+    <description>A plugin to assist in video and audio editing tasks</description>
+    <keywords>cordova,video,audio, media, editing,transcoding,encoding</keywords>
+    <repo>https://github.com/CTY-Library/cordova-plugin-media-editor.git</repo>
+    <license>MIT for iOS, GPL for Android, Apache 2.0 for Windows</license>
+
+
+    <js-module name="CTYMediaEditor" src="www/CTYMediaEditor.js">
+        <clobbers target="CTYMediaEditor" />
+    </js-module>
+
+    <js-module name="CTYMediaEditorOptions" src="www/CTYMediaEditorOptions.js">
+        <clobbers target="CTYMediaEditorOptions" />
+    </js-module>
+
+    <engines>
+        <engine name="cordova" version=">=3.0.0" />
+    </engines>
+
+    <!-- android -->
+    <platform name="android">
+        <config-file target="config.xml" parent="/*">
+            <feature name="CTYMediaEditor">
+                <param name="android-package" value="org.apache.cordova.CTYMediaEditor.CTYMediaEditor" />
+            </feature>
+        </config-file>
+
+        <!-- add plugin class -->
+        <source-file src="src/android/CTYMediaEditor.java" target-dir="src/org/apache/cordova/CTYMediaEditor" />
+        <source-file src="src/android/CustomAndroidFormatStrategy.java" target-dir="src/org/apache/cordova/CTYMediaEditor" />
+
+        <framework src="src/android/build.gradle" custom="true" type="gradleReference" />
+
+    </platform>
+
+    <!-- ios -->
+    <platform name="ios">
+        <config-file target="config.xml" parent="/*">
+            <feature name="CTYMediaEditor">
+                <param name="ios-package" value="CTYMediaEditor"/>
+            </feature>
+        </config-file>
+
+        <header-file src="src/ios/CTYMediaEditor.h" />
+        <source-file src="src/ios/CTYMediaEditor.m" />
+        <header-file src="src/ios/SDAVAssetExportSession.h" />
+        <source-file src="src/ios/SDAVAssetExportSession.m" />
+
+        <framework src="AssetsLibrary.framework" />
+        <framework src="AVFoundation.framework" />
+        <framework src="MediaPlayer.framework" />
+        <framework src="CoreVideo.framework" />
+    </platform>
+
+</plugin>

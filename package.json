@@ -1,0 +1,50 @@
+{
+  "name": "cordova-plugin-media-editor",
+  "version": "1.0.0",
+  "description": "Cordova Media Editor Plugin",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "cordova": {
+    "id": "cordova-plugin-media-editor",
+    "platforms": [
+      "android",
+      "ios"
+    ]
+  },
+  "keywords": [
+    "cordova",
+    "video",
+    "audio",
+    "media",
+    "editing",
+    "editor",
+    "cordova",
+    "ecosystem:cordova",
+    "cordova-android",
+    "cordova-ios"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CTY-Library/cordova-plugin-media-editor.git"
+  },
+  "contributors": [
+    {
+      "name": "Josh Bavari",
+      "web": "https://twitter.com/jbavari",
+      "email": "jbavari@gmail.com"
+    },
+    {
+      "name": "Ross Martin",
+      "web": "https://twitter.com/MountainDoofus",
+      "email": "rmartin311@gmail.com"
+    }
+  ],
+  "keywords": [],
+  "author": "Josh Bavari",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/CTY-Library/cordova-plugin-media-editor/issues"
+  },
+  "homepage": "https://github.com/CTY-Library/cordova-plugin-media-editor#readme"
+}
