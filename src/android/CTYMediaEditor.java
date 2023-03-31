@@ -5,11 +5,14 @@ import java.net.URL;
 import java.net.URLDecoder;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.List;
 import java.util.Locale;
+import java.util.UUID;
 
 import android.graphics.Bitmap;
 import org.apache.cordova.CordovaPlugin;
 import org.apache.cordova.CallbackContext;
+import org.apache.cordova.LOG;
 import org.apache.cordova.PluginResult;
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -22,6 +25,8 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.database.Cursor;
+import android.media.MediaCodecInfo;
+import android.media.MediaFormat;
 import android.media.MediaMetadataRetriever;
 import android.net.Uri;
 import android.os.Build;
@@ -30,7 +35,17 @@ import android.provider.DocumentsContract;
 import android.provider.MediaStore;
 import android.util.Log;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
+import com.linkedin.android.litr.MediaTransformer;
+import com.linkedin.android.litr.TransformationListener;
+import com.linkedin.android.litr.TransformationOptions;
+import com.linkedin.android.litr.analytics.TrackTransformationInfo;
+
 import net.ypresto.androidtranscoder.MediaTranscoder;
+
+//import net.ypresto.androidtranscoder.MediaTranscoder;
 
 /**
  * CTYMediaEditor plugin for Android
@@ -41,6 +56,8 @@ public class CTYMediaEditor extends CordovaPlugin {
     private static final String TAG = "CTYMediaEditor";
 
     private CallbackContext callback;
+    private MediaTransformer mediaTransformer ;
+    private String   outputFilePath;
 
     @Override
     public boolean execute(String action, JSONArray args, CallbackContext callbackContext) throws JSONException {
@@ -51,6 +68,13 @@ public class CTYMediaEditor extends CordovaPlugin {
         if (action.equals("transcodeVideo")) {
             try {
                 this.transcodeVideo(args);
+            } catch (IOException e) {
+                callback.error(e.toString());
+            }
+            return true;
+        } if (action.equals("transcodeAudio")) {
+            try {
+                this.transcodeAudio(args);
             } catch (IOException e) {
                 callback.error(e.toString());
             }
@@ -78,6 +102,7 @@ public class CTYMediaEditor extends CordovaPlugin {
         Log.d(TAG, "transcodeVideo firing");
 
         JSONObject options = args.optJSONObject(0);
+
         Log.d(TAG, "options: " + options.toString());
 
         final File inFile = this.resolveLocalFileSystemURI(options.getString("fileUri"));
@@ -92,9 +117,7 @@ public class CTYMediaEditor extends CordovaPlugin {
                 new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.ENGLISH).format(new Date())
         );
 
-        final boolean deleteInputFile = options.optBoolean("deleteInputFile", false);
-
-        Log.d(TAG, "audioSrcPath: " + videoSrcPath);
+        //final boolean deleteInputFile = options.optBoolean("deleteInputFile", false);
 
         final String outputExtension = ".mp3";
 
@@ -128,7 +151,7 @@ public class CTYMediaEditor extends CordovaPlugin {
             }
         }
 
-        final String outputFilePath = new File(
+       outputFilePath = new File(
                 mediaStorageDir.getPath(),
                 outputFileName + outputExtension
         ).getAbsolutePath();
@@ -136,9 +159,8 @@ public class CTYMediaEditor extends CordovaPlugin {
         Log.d(TAG, "outputFilePath: " + outputFilePath);
 
          // 指定编码器颜色格式 
-         MediaFormat targetVideoFormat = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, width, height);
-         targetVideoFormat.setInteger(MediaFormat.KEY_COLOR_FORMAT,
-         MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
+        MediaFormat targetVideoFormat = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, 100, 100);
+        targetVideoFormat.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
         // 指定帧率
         targetVideoFormat.setInteger(MediaFormat.KEY_FRAME_RATE, 30);
         // 指定比特率
@@ -146,20 +168,56 @@ public class CTYMediaEditor extends CordovaPlugin {
         //指定关键帧时间间隔，一般设置为每秒关键帧
         targetVideoFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1);
 
-        MediaFormat targetAudioFormat = MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_AAC, sampleRate, channelCount); 
-        targetAudioFormat.setInteger(MediaFormat.KEY_BIT_RATE, BIT_RATE);
+        int sampleRate =44100; //样本率
+        int channelCount = 2;//通道
+        int audioBitrate =  64*1024; //比特率
+        MediaFormat targetAudioFormat = MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_AAC,sampleRate, channelCount);
+        targetAudioFormat.setInteger(MediaFormat.KEY_BIT_RATE, audioBitrate);
 
-        MediaTransformer mediaTransformer = new MediaTransformer(getApplicationContext());
-        mediaTransformer.transform(requestId,
-                            audioSrcPath,
-                            outputFilePath,
-                           targetVideoFormat,  
-                           targetAudioFormat,
-                           videoTransformationListener,
-                           transformationOptions);
 
-        mediaTransformer.release();
+        mediaTransformer = new MediaTransformer(cordova.getContext());
+        TransformationOptions opt = null;// new TransformationOptions(1,null,null,null,false,false);
+        mediaTransformer.transform(UUID.randomUUID().toString(), Uri.fromFile(inFile),outputFilePath,targetVideoFormat,targetAudioFormat,videoTransformationListener,opt);
+
+        PluginResult progressResult = new PluginResult(PluginResult.Status.OK, outputFilePath);
+        progressResult.setKeepCallback(true);
+        callback.sendPluginResult(progressResult);
     }
+
+    TransformationListener videoTransformationListener = new TransformationListener() {
+        @Override
+        public void onStarted(@NonNull String id) {
+            Log.d(TAG, "TransformationListener onStarted");
+        }
+
+        @Override
+        public void onProgress(@NonNull String id, float progress) {
+            Log.d(TAG, "TransformationListener onProgress");
+        }
+
+        @Override
+        public void onCompleted(@NonNull String id, @Nullable List<TrackTransformationInfo> trackTransformationInfos) {
+            mediaTransformer.release();
+            PluginResult progressResult = new PluginResult(PluginResult.Status.OK, "success");
+            progressResult.setKeepCallback(true);
+            callback.sendPluginResult(progressResult);
+            Log.d(TAG, "TransformationListener onCompleted");
+        }
+
+        @Override
+        public void onCancelled(@NonNull String id, @Nullable List<TrackTransformationInfo> trackTransformationInfos) {
+
+        }
+
+        @Override
+        public void onError(@NonNull String id, @Nullable Throwable cause, @Nullable List<TrackTransformationInfo> trackTransformationInfos) {
+            mediaTransformer.release();
+            PluginResult progressResult = new PluginResult(PluginResult.Status.OK, "error");
+            progressResult.setKeepCallback(true);
+            callback.sendPluginResult(progressResult);
+            Log.d(TAG, "TransformationListener onCancelled");
+        }
+    };
 
     /**
      * transcodeVideo
