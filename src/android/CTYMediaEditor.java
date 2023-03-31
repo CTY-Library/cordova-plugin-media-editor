@@ -54,7 +54,7 @@ public class CTYMediaEditor extends CordovaPlugin {
 
     private CallbackContext callback;
     private MediaTransformer mediaTransformer ;
-    private String   outputFilePath;
+    private String outputFilePath;
 
     private boolean deleteInputFile =  false;
     private int width = 0;
@@ -124,14 +124,9 @@ public class CTYMediaEditor extends CordovaPlugin {
             callback.error("input video does not exist.");
             return;
         } 
-        final String outputFileName = options.optString(
-                "outputFileName",
-                new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.ENGLISH).format(new Date())
-        );
 
-
+        final String outputFileName = options.optString("outputFileName", new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.ENGLISH).format(new Date()));
         final String outputExtension = ".mp3";
-
         final Context appContext = cordova.getActivity().getApplicationContext();
         final PackageManager pm = appContext.getPackageManager();
 
@@ -145,14 +140,10 @@ public class CTYMediaEditor extends CordovaPlugin {
 
         final boolean saveToLibrary = options.optBoolean("saveToLibrary", true);
         File mediaStorageDir;
-
         if (saveToLibrary) {
-            mediaStorageDir = new File(
-                    Environment.getExternalStorageDirectory() + "/Movies",
-                    appName
-            );
+            mediaStorageDir = new File(Environment.getExternalStorageDirectory() + "/Music", appName);
         } else {
-            mediaStorageDir = new File(Environment.getExternalStorageDirectory().getAbsolutePath() + "/Android/data/" + cordova.getActivity().getPackageName() + "/files/files/audios");
+            mediaStorageDir = new File(Environment.getExternalStorageDirectory().getAbsolutePath() + "/Android/data/" + cordova.getActivity().getPackageName() + "/files/audios");
         }
 
         if (!mediaStorageDir.exists()) {
@@ -162,15 +153,10 @@ public class CTYMediaEditor extends CordovaPlugin {
             }
         }
 
-       outputFilePath = new File(
-                mediaStorageDir.getPath(),
-                outputFileName + outputExtension
-        ).getAbsolutePath();
+       outputFilePath = new File(mediaStorageDir.getPath(), outputFileName + outputExtension).getAbsolutePath();
+       Log.d(TAG, "outputFilePath: " + outputFilePath);
 
-        Log.d(TAG, "outputFilePath: " + outputFilePath);
-
-        ProcessMediaTranscode();
-
+       ProcessMediaTranscode();
     }
 
 
@@ -187,22 +173,18 @@ public class CTYMediaEditor extends CordovaPlugin {
         }
 
         final String videoSrcPath = inFile.getAbsolutePath();
-        final String outputFileName = options.optString(
-                "outputFileName",
-                new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.ENGLISH).format(new Date())
-        );
+        final String outputFileName = options.optString("outputFileName", new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.ENGLISH).format(new Date()));
 
         deleteInputFile = options.optBoolean("deleteInputFile", false);
         width = options.optInt("width", 0);
         height = options.optInt("height", 0);
         fps = options.optInt("fps", 24);
         videoBitrate = options.optInt("videoBitrate", 1000000); // default to 1 megabit
-        videoDuration = options.optLong("duration", 0) * 1000 * 1000;
+        videoDuration = options.optLong("duration", 1000 * 1000);
 
         Log.d(TAG, "videoSrcPath: " + videoSrcPath);
 
         final String outputExtension = ".mp4";
-
         final Context appContext = cordova.getActivity().getApplicationContext();
         final PackageManager pm = appContext.getPackageManager();
 
@@ -218,12 +200,9 @@ public class CTYMediaEditor extends CordovaPlugin {
         File mediaStorageDir;
 
         if (saveToLibrary) {
-            mediaStorageDir = new File(
-                    Environment.getExternalStorageDirectory() + "/Movies",
-                    appName
-            );
+            mediaStorageDir = new File(Environment.getExternalStorageDirectory() + "/Movies", appName);
         } else {
-            mediaStorageDir = new File(Environment.getExternalStorageDirectory().getAbsolutePath() + "/Android/data/" + cordova.getActivity().getPackageName() + "/files/files/videos");
+            mediaStorageDir = new File(Environment.getExternalStorageDirectory().getAbsolutePath() + "/Android/data/" + cordova.getActivity().getPackageName() + "/files/videos");
         }
 
         if (!mediaStorageDir.exists()) {
@@ -233,11 +212,7 @@ public class CTYMediaEditor extends CordovaPlugin {
             }
         }
 
-        outputFilePath = new File(
-                mediaStorageDir.getPath(),
-                outputFileName + outputExtension
-        ).getAbsolutePath();
-
+        outputFilePath = new File(mediaStorageDir.getPath(), outputFileName + outputExtension).getAbsolutePath();
         Log.d(TAG, "outputFilePath: " + outputFilePath);
 
         ProcessMediaTranscode();
@@ -299,7 +274,6 @@ public class CTYMediaEditor extends CordovaPlugin {
                 targetVideoFormat.setInteger(MediaFormat.KEY_BIT_RATE, videoBitrate);
                 //指定关键帧时间间隔，一般设置为每秒关键帧
                 targetVideoFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1);
-
 
                 MediaFormat targetAudioFormat = MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_AAC,sampleRate, channelCount);
                 targetAudioFormat.setInteger(MediaFormat.KEY_BIT_RATE, audioBitrate);
