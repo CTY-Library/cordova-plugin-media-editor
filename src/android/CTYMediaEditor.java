@@ -20,7 +20,7 @@ import org.json.JSONObject;
 
 import android.content.ContentUris;
 import android.content.Context;
-import android.content.Intent;
+
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
@@ -43,9 +43,6 @@ import com.linkedin.android.litr.TransformationListener;
 import com.linkedin.android.litr.TransformationOptions;
 import com.linkedin.android.litr.analytics.TrackTransformationInfo;
 
-import net.ypresto.androidtranscoder.MediaTranscoder;
-
-//import net.ypresto.androidtranscoder.MediaTranscoder;
 
 /**
  * CTYMediaEditor plugin for Android
@@ -58,6 +55,19 @@ public class CTYMediaEditor extends CordovaPlugin {
     private CallbackContext callback;
     private MediaTransformer mediaTransformer ;
     private String   outputFilePath;
+
+    private boolean deleteInputFile =  false;
+    private int width = 0;
+    private int height =  0;
+    private int fps =  24;
+    private int videoBitrate =  1000000; // default to 1 megabit
+    private long videoDuration = 0 * 1000 * 1000;
+
+    private int sampleRate = 44100; //样本率
+    private int channelCount = 2;//通道
+    private int audioBitrate =  64*1024; //比特率
+
+    private File inFile;
 
     @Override
     public boolean execute(String action, JSONArray args, CallbackContext callbackContext) throws JSONException {
@@ -99,25 +109,26 @@ public class CTYMediaEditor extends CordovaPlugin {
     }
 
     private void transcodeAudio(JSONArray args) throws JSONException, IOException {
-        Log.d(TAG, "transcodeVideo firing");
 
         JSONObject options = args.optJSONObject(0);
-
         Log.d(TAG, "options: " + options.toString());
 
-        final File inFile = this.resolveLocalFileSystemURI(options.getString("fileUri"));
+        sampleRate = options.optInt("sampleRate", 44100); //样本率
+        channelCount = options.optInt("channelCount", 2); //通道
+        audioBitrate = options.optInt("audioBitrate", 64*1024);//比特率
+        deleteInputFile = options.optBoolean("deleteInputFile", false);
+
+        inFile = this.resolveLocalFileSystemURI(options.getString("fileUri"));
         if (!inFile.exists()) {
             Log.d(TAG, "input file does not exist");
             callback.error("input video does not exist.");
             return;
-        }
-        final String audioSrcPath = inFile.getAbsolutePath();
+        } 
         final String outputFileName = options.optString(
                 "outputFileName",
                 new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.ENGLISH).format(new Date())
         );
 
-        //final boolean deleteInputFile = options.optBoolean("deleteInputFile", false);
 
         final String outputExtension = ".mp3";
 
@@ -158,100 +169,17 @@ public class CTYMediaEditor extends CordovaPlugin {
 
         Log.d(TAG, "outputFilePath: " + outputFilePath);
 
-         // 指定编码器颜色格式 
-        MediaFormat targetVideoFormat = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, 100, 100);
-        targetVideoFormat.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
-        // 指定帧率
-        targetVideoFormat.setInteger(MediaFormat.KEY_FRAME_RATE, 30);
-        // 指定比特率
-        targetVideoFormat.setInteger(MediaFormat.KEY_BIT_RATE, 10000000);
-        //指定关键帧时间间隔，一般设置为每秒关键帧
-        targetVideoFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1);
+        ProcessMediaTranscode();
 
-        int sampleRate =44100; //样本率
-        int channelCount = 2;//通道
-        int audioBitrate =  64*1024; //比特率
-        MediaFormat targetAudioFormat = MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_AAC,sampleRate, channelCount);
-        targetAudioFormat.setInteger(MediaFormat.KEY_BIT_RATE, audioBitrate);
-
-
-        mediaTransformer = new MediaTransformer(cordova.getContext());
-        TransformationOptions opt = null;// new TransformationOptions(1,null,null,null,false,false);
-        mediaTransformer.transform(UUID.randomUUID().toString(), Uri.fromFile(inFile),outputFilePath,targetVideoFormat,targetAudioFormat,videoTransformationListener,opt);
-
-        PluginResult progressResult = new PluginResult(PluginResult.Status.OK, outputFilePath);
-        progressResult.setKeepCallback(true);
-        callback.sendPluginResult(progressResult);
     }
 
-    TransformationListener videoTransformationListener = new TransformationListener() {
-        @Override
-        public void onStarted(@NonNull String id) {
-            Log.d(TAG, "TransformationListener onStarted");
-        }
 
-        @Override
-        public void onProgress(@NonNull String id, float progress) {
-            Log.d(TAG, "TransformationListener onProgress");
-        }
-
-        @Override
-        public void onCompleted(@NonNull String id, @Nullable List<TrackTransformationInfo> trackTransformationInfos) {
-            mediaTransformer.release();
-            PluginResult progressResult = new PluginResult(PluginResult.Status.OK, "success");
-            progressResult.setKeepCallback(true);
-            callback.sendPluginResult(progressResult);
-            Log.d(TAG, "TransformationListener onCompleted");
-        }
-
-        @Override
-        public void onCancelled(@NonNull String id, @Nullable List<TrackTransformationInfo> trackTransformationInfos) {
-
-        }
-
-        @Override
-        public void onError(@NonNull String id, @Nullable Throwable cause, @Nullable List<TrackTransformationInfo> trackTransformationInfos) {
-            mediaTransformer.release();
-            PluginResult progressResult = new PluginResult(PluginResult.Status.OK, "error");
-            progressResult.setKeepCallback(true);
-            callback.sendPluginResult(progressResult);
-            Log.d(TAG, "TransformationListener onCancelled");
-        }
-    };
-
-    /**
-     * transcodeVideo
-     *
-     * Transcodes a video
-     *
-     * ARGUMENTS
-     * =========
-     *
-     * fileUri              - path to input video
-     * outputFileName       - output file name
-     * saveToLibrary        - save to gallery
-     * deleteInputFile      - optionally remove input file
-     * width                - width for the output video
-     * height               - height for the output video
-     * fps                  - fps the video
-     * videoBitrate         - video bitrate for the output video in bits
-     * duration             - max video duration (in seconds?)
-     *
-     * RESPONSE
-     * ========
-     *
-     * outputFilePath - path to output file
-     *
-     * @param JSONArray args
-     * @return void
-     */
     private void transcodeVideo(JSONArray args) throws JSONException, IOException {
-        Log.d(TAG, "transcodeVideo firing");
 
         JSONObject options = args.optJSONObject(0);
         Log.d(TAG, "options: " + options.toString());
 
-        final File inFile = this.resolveLocalFileSystemURI(options.getString("fileUri"));
+         inFile = this.resolveLocalFileSystemURI(options.getString("fileUri"));
         if (!inFile.exists()) {
             Log.d(TAG, "input file does not exist");
             callback.error("input video does not exist.");
@@ -264,12 +192,12 @@ public class CTYMediaEditor extends CordovaPlugin {
                 new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.ENGLISH).format(new Date())
         );
 
-        final boolean deleteInputFile = options.optBoolean("deleteInputFile", false);
-        final int width = options.optInt("width", 0);
-        final int height = options.optInt("height", 0);
-        final int fps = options.optInt("fps", 24);
-        final int videoBitrate = options.optInt("videoBitrate", 1000000); // default to 1 megabit
-        final long videoDuration = options.optLong("duration", 0) * 1000 * 1000;
+        deleteInputFile = options.optBoolean("deleteInputFile", false);
+        width = options.optInt("width", 0);
+        height = options.optInt("height", 0);
+        fps = options.optInt("fps", 24);
+        videoBitrate = options.optInt("videoBitrate", 1000000); // default to 1 megabit
+        videoDuration = options.optLong("duration", 0) * 1000 * 1000;
 
         Log.d(TAG, "videoSrcPath: " + videoSrcPath);
 
@@ -305,96 +233,93 @@ public class CTYMediaEditor extends CordovaPlugin {
             }
         }
 
-        final String outputFilePath = new File(
+        outputFilePath = new File(
                 mediaStorageDir.getPath(),
                 outputFileName + outputExtension
         ).getAbsolutePath();
 
         Log.d(TAG, "outputFilePath: " + outputFilePath);
 
-        cordova.getThreadPool().execute(new Runnable() {
-            public void run() {
+        ProcessMediaTranscode();
 
-                try {
+    }
 
-                    FileInputStream fin = new FileInputStream(inFile);
 
-                    MediaTranscoder.Listener listener = new MediaTranscoder.Listener() {
-                        @Override
-                        public void onTranscodeProgress(double progress) {
-                            Log.d(TAG, "transcode running " + progress);
+    TransformationListener videoTransformationListener = new TransformationListener() {
+        @Override
+        public void onStarted(@NonNull String id) {
+            Log.d(TAG, "TransformationListener onStarted");
+        }
 
-                            JSONObject jsonObj = new JSONObject();
-                            try {
-                                jsonObj.put("progress", progress);
-                            } catch (JSONException e) {
-                                e.printStackTrace();
-                            }
+        @Override
+        public void onProgress(@NonNull String id, float progress) {
+            Log.d(TAG, "TransformationListener onProgress");
+        }
 
-                            PluginResult progressResult = new PluginResult(PluginResult.Status.OK, jsonObj);
-                            progressResult.setKeepCallback(true);
-                            callback.sendPluginResult(progressResult);
-                        }
+        @Override
+        public void onCompleted(@NonNull String id, @Nullable List<TrackTransformationInfo> trackTransformationInfos) {
+            mediaTransformer.release();
+            if(deleteInputFile){
+                // 删除原文件
+                inFile.delete();
+                Log.d(TAG, "delete inFile:"+inFile.getAbsolutePath());
+            }
+            PluginResult progressResult = new PluginResult(PluginResult.Status.OK, "success");
+            progressResult.setKeepCallback(true);
+            callback.sendPluginResult(progressResult);
+            Log.d(TAG, "TransformationListener onCompleted");
+        }
 
-                        @Override
-                        public void onTranscodeCompleted() {
+        @Override
+        public void onCancelled(@NonNull String id, @Nullable List<TrackTransformationInfo> trackTransformationInfos) {
 
-                            File outFile = new File(outputFilePath);
-                            if (!outFile.exists()) {
-                                Log.d(TAG, "outputFile doesn't exist!");
-                                callback.error("an error ocurred during transcoding");
-                                return;
-                            }
+        }
 
-                            // make the gallery display the new file if saving to library
-                            if (saveToLibrary) {
-                                Intent scanIntent = new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE);
-                                scanIntent.setData(Uri.fromFile(inFile));
-                                scanIntent.setData(Uri.fromFile(outFile));
-                                appContext.sendBroadcast(scanIntent);
-                            }
+        @Override
+        public void onError(@NonNull String id, @Nullable Throwable cause, @Nullable List<TrackTransformationInfo> trackTransformationInfos) {
+            mediaTransformer.release();
+            PluginResult progressResult = new PluginResult(PluginResult.Status.OK, "error");
+            progressResult.setKeepCallback(true);
+            callback.sendPluginResult(progressResult);
+            Log.d(TAG, "TransformationListener onCancelled");
+        }
+    };
 
-                            if (deleteInputFile) {
-                                inFile.delete();
-                            }
+    //处理音视频转码,
+    private  void  ProcessMediaTranscode(){
+         cordova.getThreadPool().execute(new Runnable() {
+          public void run() {
+          try {
+                // 指定编码器颜色格式
+                MediaFormat targetVideoFormat = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, width, height);
+                targetVideoFormat.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
+                // 指定帧率
+                targetVideoFormat.setInteger(MediaFormat.KEY_FRAME_RATE, fps);
+                // 指定比特率
+                targetVideoFormat.setInteger(MediaFormat.KEY_BIT_RATE, videoBitrate);
+                //指定关键帧时间间隔，一般设置为每秒关键帧
+                targetVideoFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1);
 
-                            callback.success(outputFilePath);
-                        }
 
-                        @Override
-                        public void onTranscodeCanceled() {
-                            callback.error("transcode canceled");
-                            Log.d(TAG, "transcode canceled");
-                        }
+                MediaFormat targetAudioFormat = MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_AAC,sampleRate, channelCount);
+                targetAudioFormat.setInteger(MediaFormat.KEY_BIT_RATE, audioBitrate);
 
-                        @Override
-                        public void onTranscodeFailed(Exception exception) {
-                            callback.error(exception.toString());
-                            Log.d(TAG, "transcode exception", exception);
-                        }
-                    };
+                mediaTransformer = new MediaTransformer(cordova.getContext());
+                TransformationOptions opt = null;// new TransformationOptions(1,null,null,null,false,false); //todo 参数设置 ?
+                mediaTransformer.transform(UUID.randomUUID().toString(), Uri.fromFile(inFile),outputFilePath,targetVideoFormat,targetAudioFormat,videoTransformationListener,opt);
 
-                    MediaMetadataRetriever mmr = new MediaMetadataRetriever();
-                    mmr.setDataSource(videoSrcPath);
-
-                    String orientation;
-                    String mmrOrientation = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION);
-                    Log.d(TAG, "mmrOrientation: " + mmrOrientation); // 0, 90, 180, or 270
-
-                    float videoWidth = Float.parseFloat(mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH));
-                    float videoHeight = Float.parseFloat(mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT));
-
-                    MediaTranscoder.getInstance().transcodeVideo(fin.getFD(), outputFilePath,
-                            new CustomAndroidFormatStrategy(videoBitrate, fps, width, height), listener, videoDuration);
+                PluginResult progressResult = new PluginResult(PluginResult.Status.OK, outputFilePath);
+                progressResult.setKeepCallback(true);
+                callback.sendPluginResult(progressResult);
 
                 } catch (Throwable e) {
                     Log.d(TAG, "transcode exception ", e);
                     callback.error(e.toString());
                 }
-
             }
-        });
+         });
     }
+
 
     /**
      * createThumbnail
