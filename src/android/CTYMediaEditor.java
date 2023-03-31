@@ -229,6 +229,9 @@ public class CTYMediaEditor extends CordovaPlugin {
         @Override
         public void onProgress(@NonNull String id, float progress) {
             Log.d(TAG, "TransformationListener onProgress");
+            PluginResult progressResult = new PluginResult(PluginResult.Status.OK, progress); //Float.toString(progress)
+            progressResult.setKeepCallback(true);
+            callback.sendPluginResult(progressResult);
         }
 
         @Override
@@ -239,9 +242,7 @@ public class CTYMediaEditor extends CordovaPlugin {
                 inFile.delete();
                 Log.d(TAG, "delete inFile:"+inFile.getAbsolutePath());
             }
-            PluginResult progressResult = new PluginResult(PluginResult.Status.OK, "success");
-            progressResult.setKeepCallback(true);
-            callback.sendPluginResult(progressResult);
+            callback.success(outputFilePath);
             Log.d(TAG, "TransformationListener onCompleted");
         }
 
@@ -253,10 +254,11 @@ public class CTYMediaEditor extends CordovaPlugin {
         @Override
         public void onError(@NonNull String id, @Nullable Throwable cause, @Nullable List<TrackTransformationInfo> trackTransformationInfos) {
             mediaTransformer.release();
-            PluginResult progressResult = new PluginResult(PluginResult.Status.OK, "error");
-            progressResult.setKeepCallback(true);
-            callback.sendPluginResult(progressResult);
-            Log.d(TAG, "TransformationListener onCancelled");
+            //PluginResult progressResult = new PluginResult(PluginResult.Status.OK, "error");
+            //progressResult.setKeepCallback(true);
+            //callback.sendPluginResult(progressResult);
+            Log.d(TAG, "TransformationListener onError");
+            callback.error("error");
         }
     };
 
@@ -282,9 +284,9 @@ public class CTYMediaEditor extends CordovaPlugin {
                 TransformationOptions opt = null;// new TransformationOptions(1,null,null,null,false,false); //todo 参数设置 ?
                 mediaTransformer.transform(UUID.randomUUID().toString(), Uri.fromFile(inFile),outputFilePath,targetVideoFormat,targetAudioFormat,videoTransformationListener,opt);
 
-                PluginResult progressResult = new PluginResult(PluginResult.Status.OK, outputFilePath);
-                progressResult.setKeepCallback(true);
-                callback.sendPluginResult(progressResult);
+                //PluginResult progressResult = new PluginResult(PluginResult.Status.OK, outputFilePath);
+                //progressResult.setKeepCallback(true);
+                //callback.sendPluginResult(progressResult);
 
                 } catch (Throwable e) {
                     Log.d(TAG, "transcode exception ", e);
