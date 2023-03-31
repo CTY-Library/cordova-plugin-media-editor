@@ -323,10 +323,33 @@
     };
 
 
-    // AVAsset *asset = [AVAsset assetWithURL:inputURL];
-    // AVAssetExportSession *exportSession = [[AVAssetExportSession alloc] initWithAsset:asset]; //AVAsset *asset = [AVAsset assetWithURL:inputURL];
+    // AVAsset *asset = [AVAsset assetWithURL:inputURL]; //AVAssetExportPresetPassthrouge
+    // AVAssetExportSession *exportSession = [[AVAssetExportSession alloc] initWithAsset:asset presetName:AVAssetExportPresetAppleM4A]; //AVAsset *asset = [AVAsset assetWithURL:inputURL];
     // exportSession.outputFileType = AVFileTypeMp3;
     // exportSession.outputURL = outputURL;
+    
+    // 创建一个裁剪范围 从30s开始的一个20s时长
+    // CMTime startTime = CMTimeMake(30, 1);
+    // CMTime stopTime = CMTimeMake(50, 1);
+    // CMTimeRange exportTimeRange = CMTimeRangeFromTimeToTime(startTime, stopTime);
+    
+    // CMTime start = CMTimeMakeWithSeconds(1.0, 600);
+    // CMTime duration = CMTimeMakeWithSeconds(3.0, 600);
+    // CMTimeRange range = CMTimeRangeMake(start, duration);
+    
+    // // 创建一个淡出时间范围，从修剪的时间开始的10s
+    // CMTime startFadeInTime = startTime;
+    // CMTime endFadeInTime = CMTimeMake(40, 1);
+    // CMTimeRange fadeInTimeRange = CMTimeRangeFromTimeToTime(startFadeInTime, endFadeInTime);
+    //  // 创建音频混响
+    // AVMutableAudioMix *exportAudioMix = [AVMutableAudioMix audioMix];
+    // AVMutableAudioMixInputParameters *exportAudioMixInputParameters = [AVMutableAudioMixInputParameters audioMixInputParametersWithTrack:track];
+    // [exportAudioMixInputParameters setVolumeRampFromStartVolume:0.0 toEndVolume:1.0 timeRange:fadeInTimeRange];
+    // exportAudioMix.inputParameters = @[exportAudioMixInputParameters];
+    // exportSession.audioMix = exportAudioMix; // fade in audio mix
+
+    // exportSession.timeRange = exportTimeRange; // trim time range
+
     // [exportSession exportAsynchronouslyWithCompletionHandler:^{
     //     if (exportSession.status == AVAssetExportSessionStatusCompleted) {
     //         NSLog(@"转换成功");
