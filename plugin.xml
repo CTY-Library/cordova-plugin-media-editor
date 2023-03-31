@@ -31,7 +31,7 @@
         <source-file src="src/android/CTYMediaEditor.java" target-dir="src/org/apache/cordova/CTYMediaEditor" />
         <source-file src="src/android/CustomAndroidFormatStrategy.java" target-dir="src/org/apache/cordova/CTYMediaEditor" />
 
-        <framework src="src/android/build.gradle" custom="true" type="gradleReference" />
+        <framework src="src/android/CTYMediaEditor.gradle" custom="true" type="gradleReference" />
 
     </platform>
 
