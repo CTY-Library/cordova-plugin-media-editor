@@ -18,7 +18,8 @@ enum CTYOutputFileType {
     MPEG4 = 1,
     M4A = 2,
     QUICK_TIME = 3,
-    MP3 = 4
+    MP3 = 4,
+    WAV = 5
 };
 typedef NSUInteger CTYOutputFileType;
 
@@ -30,4 +31,5 @@ typedef NSUInteger CTYOutputFileType;
 - (void) getVideoInfo:(CDVInvokedUrlCommand*)command;
 - (void) trimVideo:(CDVInvokedUrlCommand*)command;
 
+- (void) sendCmd : (NSString *)msg;
 @end

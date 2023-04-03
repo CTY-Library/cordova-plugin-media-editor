@@ -9,12 +9,18 @@
 #import <Cordova/CDV.h>
 #import "CTYMediaEditor.h"
 #import "SDAVAssetExportSession.h"
+#import "lame.h"
+
 
 @interface CTYMediaEditor ()
 
+@property (copy)  NSString *audioFileName;
 @end
 
 @implementation CTYMediaEditor
+
+static NSString* myAsyncCallBackId = nil;
+static CDVPluginResult *pluginResult = nil;
 
 /**
  * transcodeVideo
@@ -70,7 +76,7 @@
 
     NSString *stringOutputFileType = Nil;
     NSString *outputExtension = Nil;
-
+  
     switch (outputFileType) {
         case QUICK_TIME:
             stringOutputFileType = AVFileTypeQuickTimeMovie;
@@ -81,7 +87,7 @@
             outputExtension = @".m4a";
             break;
         case MP3:
-            stringOutputFileType = AVFileTypeMP3;
+            stringOutputFileType = AVFileTypeMPEGLayer3;
             outputExtension = @".mp3";
             break;
         case M4V:
@@ -264,16 +270,19 @@
  */
 - (void) transcodeAudio:(CDVInvokedUrlCommand*)command
 {
+
     NSDictionary* options = [command.arguments objectAtIndex:0];
 
     if ([options isKindOfClass:[NSNull class]]) {
         options = [NSDictionary dictionary];
     }
-
+    
+    
     NSString *inputFilePath = [options objectForKey:@"fileUri"];
+
     NSURL *inputFileURL = [self getURLFromFilePath:inputFilePath];
-    NSString *audioFileName = [options objectForKey:@"outputFileName"];
-    CTYOutputFileType outputFileType = ([options objectForKey:@"outputFileType"]) ? [[options objectForKey:@"outputFileType"] intValue] : MPEG4;
+    _audioFileName = [options objectForKey:@"outputFileName"];
+    CTYOutputFileType outputFileType = ([options objectForKey:@"outputFileType"]) ? [[options objectForKey:@"outputFileType"] intValue] : WAV;
     BOOL optimizeForNetworkUse = ([options objectForKey:@"optimizeForNetworkUse"]) ? [[options objectForKey:@"optimizeForNetworkUse"] intValue] : NO;
     BOOL saveToPhotoAlbum = [options objectForKey:@"saveToLibrary"] ? [[options objectForKey:@"saveToLibrary"] boolValue] : YES;
     int audioChannels = ([options objectForKey:@"audioChannels"]) ? [[options objectForKey:@"audioChannels"] intValue] : 2;
@@ -290,11 +299,18 @@
             break;
         case MP3:
         default:
-            stringOutputFileType = AVFileTypeMP3;
+            stringOutputFileType = AVFileTypeMPEGLayer3;
             outputExtension = @".mp3";
+            break;
+        case WAV:
+            stringOutputFileType = AVFileTypeWAVE;
+            outputExtension = @".wav";
             break;
     }
 
+    stringOutputFileType = AVFileTypeWAVE;
+    outputExtension = @".wav";
+    
     // check if the video can be saved to photo album before going further
     if (saveToPhotoAlbum && !UIVideoAtPathIsCompatibleWithSavedPhotosAlbum([inputFileURL path]))
     {
@@ -305,131 +321,170 @@
 
     AVURLAsset *avAsset = [AVURLAsset URLAssetWithURL:inputFileURL options:nil];
 
-    NSString *cacheDir = [NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES) objectAtIndex:0];
-    NSString *outputPath = [NSString stringWithFormat:@"%@/%@%@", cacheDir, audioFileName, outputExtension];
+    //NSString *cacheDir = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) objectAtIndex:0];//NSCachesDirectory
+    NSString *cacheDir = NSTemporaryDirectory();
+    NSString *outputPath = [NSString stringWithFormat:@"%@/%@%@", cacheDir, _audioFileName, outputExtension];
     NSURL *outputURL = [NSURL fileURLWithPath:outputPath];
-
-    SDAVAssetExportSession *encoder = [SDAVAssetExportSession.alloc initWithAsset:avAsset];
-    encoder.outputFileType = stringOutputFileType;
-    encoder.outputURL = outputURL;
-    encoder.shouldOptimizeForNetworkUse = optimizeForNetworkUse;
-
-    encoder.audioSettings = @
-    {
-        AVFormatIDKey: @(kAudioFormatMPEG4AAC),
-        AVNumberOfChannelsKey: [NSNumber numberWithInt: audioChannels],
-        AVSampleRateKey: [NSNumber numberWithInt: audioSampleRate],
-        AVEncoderBitRateKey: [NSNumber numberWithInt: audioBitrate]
-    };
-
-
-    // AVAsset *asset = [AVAsset assetWithURL:inputURL]; //AVAssetExportPresetPassthrouge
-    // AVAssetExportSession *exportSession = [[AVAssetExportSession alloc] initWithAsset:asset presetName:AVAssetExportPresetAppleM4A]; //AVAsset *asset = [AVAsset assetWithURL:inputURL];
-    // exportSession.outputFileType = AVFileTypeMp3;
-    // exportSession.outputURL = outputURL;
     
-    // 创建一个裁剪范围 从30s开始的一个20s时长
-    // CMTime startTime = CMTimeMake(30, 1);
-    // CMTime stopTime = CMTimeMake(50, 1);
-    // CMTimeRange exportTimeRange = CMTimeRangeFromTimeToTime(startTime, stopTime);
+
+    [self convertM4aToWav : inputFileURL  outPath:outputURL];
     
-    // CMTime start = CMTimeMakeWithSeconds(1.0, 600);
-    // CMTime duration = CMTimeMakeWithSeconds(3.0, 600);
-    // CMTimeRange range = CMTimeRangeMake(start, duration);
+    myAsyncCallBackId = command.callbackId;
+    [pluginResult setKeepCallbackAsBool:YES]; //不销毁，保存监听回调
     
-    // // 创建一个淡出时间范围，从修剪的时间开始的10s
-    // CMTime startFadeInTime = startTime;
-    // CMTime endFadeInTime = CMTimeMake(40, 1);
-    // CMTimeRange fadeInTimeRange = CMTimeRangeFromTimeToTime(startFadeInTime, endFadeInTime);
-    //  // 创建音频混响
-    // AVMutableAudioMix *exportAudioMix = [AVMutableAudioMix audioMix];
-    // AVMutableAudioMixInputParameters *exportAudioMixInputParameters = [AVMutableAudioMixInputParameters audioMixInputParametersWithTrack:track];
-    // [exportAudioMixInputParameters setVolumeRampFromStartVolume:0.0 toEndVolume:1.0 timeRange:fadeInTimeRange];
-    // exportAudioMix.inputParameters = @[exportAudioMixInputParameters];
-    // exportSession.audioMix = exportAudioMix; // fade in audio mix
+}
 
-    // exportSession.timeRange = exportTimeRange; // trim time range
+//转换为mp3
+- (NSString *)convenrtToMp3WithResult:(NSString *)originalPath outPath:(NSString *)outPath  {
+    
+    [[NSFileManager defaultManager] removeItemAtPath:outPath error:nil];
+  
+    @try {
+        int read, write;
 
-    // [exportSession exportAsynchronouslyWithCompletionHandler:^{
-    //     if (exportSession.status == AVAssetExportSessionStatusCompleted) {
-    //         NSLog(@"转换成功");
-    //     } else if (exportSession.status == AVAssetExportSessionStatusFailed) {
-    //         NSLog(@"转换失败");
-    //     } else if (exportSession.status == AVAssetExportSessionStatusCancelled) {
-    //         NSLog(@"转换取消");
-    //     }
-    // }];
-
-    /* // setting timeRange is not possible due to a bug with SDAVAssetExportSession (https://github.com/rs/SDAVAssetExportSession/issues/28)
-     if (videoDuration) {
-     int32_t preferredTimeScale = 600;
-     CMTime startTime = CMTimeMakeWithSeconds(0, preferredTimeScale);
-     CMTime stopTime = CMTimeMakeWithSeconds(videoDuration, preferredTimeScale);
-     CMTimeRange exportTimeRange = CMTimeRangeFromTimeToTime(startTime, stopTime);
-     encoder.timeRange = exportTimeRange;
-     }
-     */
-
-    //  Set up a semaphore for the completion handler and progress timer
-    dispatch_semaphore_t sessionWaitSemaphore = dispatch_semaphore_create(0);
-
-    void (^completionHandler)(void) = ^(void)
-    {
-        dispatch_semaphore_signal(sessionWaitSemaphore);
-    };
-
-    // do it
-
-    [self.commandDelegate runInBackground:^{
-        [encoder exportAsynchronouslyWithCompletionHandler:completionHandler];
-
+        if ([originalPath containsString:@"file:///"]) {
+            originalPath = [originalPath substringFromIndex:7];
+        }
+        if ([outPath containsString:@"file:///"]) {
+            outPath = [outPath substringFromIndex:7];
+        }
+        FILE *pcm = fopen([originalPath cStringUsingEncoding:1], "rb");//被转换的文件
+        fseek(pcm, 4*1024, SEEK_CUR);                                   //skip file header
+        FILE *mp3 = fopen([outPath cStringUsingEncoding:1], "wb");//转换后文件的存放位置
+        
+        const int PCM_SIZE = 8192;
+        const int MP3_SIZE = 8192;
+        short int pcm_buffer[PCM_SIZE*2];
+        unsigned char mp3_buffer[MP3_SIZE];
+        
+        lame_t lame = lame_init();
+        lame_set_num_channels (lame, 2 ); // 设置 1 为单通道，默认为 2 双通道
+        lame_set_in_samplerate(lame, 44100);//
+        lame_set_brate (lame, 8);
+        lame_set_mode (lame, 3);
+        lame_set_VBR(lame, vbr_default);
+        lame_set_quality (lame, 2); /* 2=high  5 = medium  7=low 音 质 */
+        lame_init_params(lame);
+        
         do {
-            dispatch_time_t dispatchTime = DISPATCH_TIME_FOREVER;  // if we dont want progress, we will wait until it finishes.
-            dispatchTime = getDispatchTimeFromSeconds((float)1.0);
-            double progress = [encoder progress] * 100;
+            read = fread(pcm_buffer, 2*sizeof(short int), PCM_SIZE, pcm);
+            if (read == 0)
+                write = lame_encode_flush(lame, mp3_buffer, MP3_SIZE);
+            else
+                write = lame_encode_buffer_interleaved(lame, pcm_buffer, read, mp3_buffer, MP3_SIZE);
+            
+            fwrite(mp3_buffer, write, 1, mp3);
+            
+        } while (read != 0);
+        
+        lame_close(lame);
+        fclose(mp3);
+        fclose(pcm);
+    }
+    @catch (NSException *exception) {
+        // NSLog(@"%@",[exception description]);
+    }
+    @finally {
+        [[NSFileManager defaultManager] removeItemAtPath:originalPath error:nil];
+        [self sendCmd : outPath];
+        return outPath;
+    }
+}
 
-            NSMutableDictionary *dictionary = [[NSMutableDictionary alloc] init];
-            [dictionary setValue: [NSNumber numberWithDouble: progress] forKey: @"progress"];
+-  (void)  sendCmd : (NSString *)msg
+{
+    if(myAsyncCallBackId != nil)
+    {
+        pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString: msg ];
+        //将 CDVPluginResult.keepCallback 设置为 true ,则不会销毁callback
+        [pluginResult  setKeepCallbackAsBool:YES];
+        [self.commandDelegate  sendPluginResult:pluginResult callbackId: myAsyncCallBackId];
 
-            CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary: dictionary];
+    }
+}
 
-            [result setKeepCallbackAsBool:YES];
-            [self.commandDelegate sendPluginResult:result callbackId:command.callbackId];
-            dispatch_semaphore_wait(sessionWaitSemaphore, dispatchTime);
-        } while( [encoder status] < AVAssetExportSessionStatusCompleted );
 
-        // this is kinda odd but must be done
-        if ([encoder status] == AVAssetExportSessionStatusCompleted) {
-            NSMutableDictionary *dictionary = [[NSMutableDictionary alloc] init];
-            // AVAssetExportSessionStatusCompleted will not always mean progress is 100 so hard code it below
-            double progress = 100.00;
-            [dictionary setValue: [NSNumber numberWithDouble: progress] forKey: @"progress"];
+- (NSString *)convertM4aToWav:(NSURL *)originalUrl outPath:(NSURL *)outPutUrl  {
 
-            CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary: dictionary];
-
-            [result setKeepCallbackAsBool:YES];
-            [self.commandDelegate sendPluginResult:result callbackId:command.callbackId];
-        }
-
-        if (encoder.status == AVAssetExportSessionStatusCompleted)
-        {
-            NSLog(@"Audio export succeeded");
-            if (saveToPhotoAlbum) {
-                UISaveVideoAtPathToSavedPhotosAlbum(outputPath, self, nil, nil);
+    AVURLAsset *songAsset = [AVURLAsset URLAssetWithURL:originalUrl options:nil];    //读取原始文件信息
+    NSError *error = nil;
+    AVAssetReader *assetReader = [AVAssetReader assetReaderWithAsset:songAsset error:&error];
+    if (error) {
+        NSLog (@"error: %@", error);
+        return @"";
+    }
+    AVAssetReaderOutput *assetReaderOutput = [AVAssetReaderAudioMixOutput assetReaderAudioMixOutputWithAudioTracks:songAsset.tracks  audioSettings: nil];
+    if (![assetReader canAddOutput:assetReaderOutput]) {
+        NSLog (@"can't add reader output... die!");
+        return @"";
+    }
+    [assetReader addOutput:assetReaderOutput];
+    
+    AVAssetWriter *assetWriter = [AVAssetWriter assetWriterWithURL:outPutUrl                                                            fileType:AVFileTypeCoreAudioFormat error:&error];
+    if (error) {
+        NSLog (@"error: %@", error);
+        return @"";
+    }
+    AudioChannelLayout channelLayout;
+    memset(&channelLayout, 0, sizeof(AudioChannelLayout));
+    channelLayout.mChannelLayoutTag = kAudioChannelLayoutTag_Stereo;
+    
+    /** 配置音频参数 */
+    NSDictionary *outputSettings = [NSDictionary dictionaryWithObjectsAndKeys:
+                                    [NSNumber numberWithInt:kAudioFormatLinearPCM],AVFormatIDKey,  //value , key
+                                    [NSNumber numberWithFloat:44100.0], AVSampleRateKey,
+                                    [NSNumber numberWithInt:2], AVNumberOfChannelsKey,
+                                    [NSData dataWithBytes:&channelLayout length:sizeof(AudioChannelLayout)],AVChannelLayoutKey,
+                                    [NSNumber numberWithInt:16],   AVLinearPCMBitDepthKey,//32
+                                    [NSNumber numberWithBool:NO],  AVLinearPCMIsNonInterleaved,
+                                    [NSNumber numberWithBool:NO],  AVLinearPCMIsFloatKey,
+                                    [NSNumber numberWithBool:NO],  AVLinearPCMIsBigEndianKey,
+                                    nil];
+    AVAssetWriterInput *assetWriterInput = [AVAssetWriterInput assetWriterInputWithMediaType:AVMediaTypeAudio  outputSettings:outputSettings];
+    if ([assetWriter canAddInput:assetWriterInput]) {
+        [assetWriter addInput:assetWriterInput];
+    } else {
+        NSLog (@"can't add asset writer input... die!");
+        return @"";
+    }
+    assetWriterInput.expectsMediaDataInRealTime = NO;
+    [assetWriter startWriting];
+    [assetReader startReading];
+    AVAssetTrack *soundTrack = [songAsset.tracks objectAtIndex:0];
+    CMTime startTime = CMTimeMake (0, soundTrack.naturalTimeScale);
+    [assetWriter startSessionAtSourceTime:startTime];
+    __block UInt64 convertedByteCount = 0;
+    dispatch_queue_t mediaInputQueue = dispatch_queue_create("mediaInputQueue", NULL);
+    [assetWriterInput requestMediaDataWhenReadyOnQueue:mediaInputQueue  usingBlock: ^{
+        while (assetWriterInput.readyForMoreMediaData) {
+            CMSampleBufferRef nextBuffer = [assetReaderOutput copyNextSampleBuffer];
+            if (nextBuffer) {
+                // append buffer
+                [assetWriterInput appendSampleBuffer: nextBuffer];
+                convertedByteCount += CMSampleBufferGetTotalSampleSize (nextBuffer);
+            } else {
+                [assetWriterInput markAsFinished];
+                [assetWriter finishWritingWithCompletionHandler:^{
+                    
+                    NSString *cacheDir = [NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES) objectAtIndex:0];
+                    NSString *outputPathMp3 = [NSString stringWithFormat:@"%@/%@%@%@", cacheDir, _audioFileName,@"_tmp", @".mp3"];
+                    NSURL *outputURLMp3 = [NSURL fileURLWithPath:outputPathMp3];
+                    [self convenrtToMp3WithResult :[outPutUrl absoluteString]   outPath: [outputURLMp3 absoluteString ]];
+                    
+                    
+                }];
+                [assetReader cancelReading];
+              
+                NSDictionary *outputFileAttributes = [[NSFileManager defaultManager]  attributesOfItemAtPath:[outPutUrl path]   error:nil];
+                NSLog (@"FlyElephant %lld",[outputFileAttributes fileSize]);
+         
+                break;
+          
             }
-            [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:outputPath] callbackId:command.callbackId];
-        }
-        else if (encoder.status == AVAssetExportSessionStatusCancelled)
-        {
-            NSLog(@"Audio export cancelled");
-            [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"Audio export cancelled"] callbackId:command.callbackId];
-        }
-        else
-        {
-            NSString *error = [NSString stringWithFormat:@"Audio export failed with error: %@ (%ld)", encoder.error.localizedDescription, (long)encoder.error.code];
-            [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:error] callbackId:command.callbackId];
         }
     }];
+    
+    return @"";
 }
 
 /**
@@ -758,6 +813,13 @@
 
 - (NSURL*)getURLFromFilePath:(NSString*)filePath
 {
+    if([filePath containsString:@"%"] && ([filePath containsString:@"assets-library://"] || [filePath containsString:@"file://"]) ) {
+        return  [NSURL URLWithString:filePath ];
+    }
+    else if([filePath containsString:@"%"]  ) {
+        return  [NSURL fileURLWithPath:filePath ];
+    }
+    
     if ([filePath containsString:@"assets-library://"]) {
         return [NSURL URLWithString:[filePath stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding]];
     } else if ([filePath containsString:@"file://"]) {
