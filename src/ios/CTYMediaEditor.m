@@ -62,7 +62,7 @@ static CDVPluginResult *pluginResult = nil;
     NSString *inputFilePath = [options objectForKey:@"fileUri"];
     NSURL *inputFileURL = [self getURLFromFilePath:inputFilePath];
     NSString *videoFileName = [options objectForKey:@"outputFileName"];
-    CTYOutputFileType outputFileType = ([options objectForKey:@"outputFileType"]) ? [[options objectForKey:@"outputFileType"] intValue] : MPEG4;
+   // CTYOutputFileType outputFileType = ([options objectForKey:@"outputFileType"]) ? [[options objectForKey:@"outputFileType"] intValue] : MPEG4;
     BOOL optimizeForNetworkUse = ([options objectForKey:@"optimizeForNetworkUse"]) ? [[options objectForKey:@"optimizeForNetworkUse"] intValue] : NO;
     BOOL saveToPhotoAlbum = [options objectForKey:@"saveToLibrary"] ? [[options objectForKey:@"saveToLibrary"] boolValue] : YES;
     //float videoDuration = [[options objectForKey:@"duration"] floatValue];
@@ -73,6 +73,25 @@ static CDVPluginResult *pluginResult = nil;
     int audioChannels = ([options objectForKey:@"audioChannels"]) ? [[options objectForKey:@"audioChannels"] intValue] : 2;
     int audioSampleRate = ([options objectForKey:@"audioSampleRate"]) ? [[options objectForKey:@"audioSampleRate"] intValue] : 44100;
     int audioBitrate = ([options objectForKey:@"audioBitrate"]) ? [[options objectForKey:@"audioBitrate"] intValue] : 128000; // default to 128 kilobits
+
+    NSString *strOutputFileType = [options objectForKey:@"outputFileType"] ;
+    CTYOutputFileType outputFileType =  MPEG4;
+    if ([strOutputFileType isEqual: @"M4V"]) {
+        outputFileType = M4V;
+    }
+    else if ([strOutputFileType isEqual: @"M4A"]) {
+        outputFileType = M4A;
+    }
+    else if ([strOutputFileType isEqual: @"QUICK_TIME"]) {
+        outputFileType = QUICK_TIME;
+    }
+    else if ([strOutputFileType isEqual: @"MP3"]) {
+        outputFileType = MP3;
+    }
+    else if ([strOutputFileType isEqual: @"WAV"]) {
+        outputFileType = WAV;
+    }
+
 
     NSString *stringOutputFileType = Nil;
     NSString *outputExtension = Nil;
@@ -207,6 +226,7 @@ static CDVPluginResult *pluginResult = nil;
 
             [result setKeepCallbackAsBool:YES];
             [self.commandDelegate sendPluginResult:result callbackId:command.callbackId];
+            
             dispatch_semaphore_wait(sessionWaitSemaphore, dispatchTime);
         } while( [encoder status] < AVAssetExportSessionStatusCompleted );
 
@@ -282,12 +302,25 @@ static CDVPluginResult *pluginResult = nil;
 
     NSURL *inputFileURL = [self getURLFromFilePath:inputFilePath];
     _audioFileName = [options objectForKey:@"outputFileName"];
-    CTYOutputFileType outputFileType = ([options objectForKey:@"outputFileType"]) ? [[options objectForKey:@"outputFileType"] intValue] : WAV;
+   // CTYOutputFileType outputFileType = ([options objectForKey:@"outputFileType"]) ? [[options objectForKey:@"outputFileType"] intValue] : WAV;
     BOOL optimizeForNetworkUse = ([options objectForKey:@"optimizeForNetworkUse"]) ? [[options objectForKey:@"optimizeForNetworkUse"] intValue] : NO;
     BOOL saveToPhotoAlbum = [options objectForKey:@"saveToLibrary"] ? [[options objectForKey:@"saveToLibrary"] boolValue] : YES;
     int audioChannels = ([options objectForKey:@"audioChannels"]) ? [[options objectForKey:@"audioChannels"] intValue] : 2;
     int audioSampleRate = ([options objectForKey:@"audioSampleRate"]) ? [[options objectForKey:@"audioSampleRate"] intValue] : 44100;
     int audioBitrate = ([options objectForKey:@"audioBitrate"]) ? [[options objectForKey:@"audioBitrate"] intValue] : 128000; // default to 128 kilobits
+
+
+    NSString *strOutputFileType = [options objectForKey:@"outputFileType"] ;
+    CTYOutputFileType outputFileType =  MP3;
+    if ([strOutputFileType isEqual: @"M4A"]) {
+        outputFileType = M4A;
+    }
+    else if ([strOutputFileType isEqual: @"MP3"]) {
+        outputFileType = MP3;
+    }
+    else if ([strOutputFileType isEqual: @"WAV"]) {
+        outputFileType = WAV;
+    }
 
     NSString *stringOutputFileType = Nil;
     NSString *outputExtension = Nil;
@@ -327,7 +360,7 @@ static CDVPluginResult *pluginResult = nil;
     NSURL *outputURL = [NSURL fileURLWithPath:outputPath];
     
 
-    [self convertM4aToWav : inputFileURL  outPath:outputURL];
+    [self convertM4aToWav : inputFileURL  outPath:outputURL  outputFileType:outputFileType];
     
     myAsyncCallBackId = command.callbackId;
     [pluginResult setKeepCallbackAsBool:YES]; //不销毁，保存监听回调
@@ -335,7 +368,7 @@ static CDVPluginResult *pluginResult = nil;
 }
 
 //转换为mp3
-- (NSString *)convenrtToMp3WithResult:(NSString *)originalPath outPath:(NSString *)outPath  {
+- (NSString *)convertToMp3WithResult:(NSString *)originalPath outPath:(NSString *)outPath  {
     
     [[NSFileManager defaultManager] removeItemAtPath:outPath error:nil];
   
@@ -386,25 +419,27 @@ static CDVPluginResult *pluginResult = nil;
     }
     @finally {
         [[NSFileManager defaultManager] removeItemAtPath:originalPath error:nil];
-        [self sendCmd : outPath];
+        [self sendCmd : outPath keepCallback:NO];
         return outPath;
     }
 }
 
--  (void)  sendCmd : (NSString *)msg
+-  (void)  sendCmd : (NSString *)msg  keepCallback: (BOOL ) keepCallback
 {
     if(myAsyncCallBackId != nil)
     {
         pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString: msg ];
         //将 CDVPluginResult.keepCallback 设置为 true ,则不会销毁callback
-        [pluginResult  setKeepCallbackAsBool:YES];
+        if(keepCallback){
+         [pluginResult  setKeepCallbackAsBool:YES];
+        }
         [self.commandDelegate  sendPluginResult:pluginResult callbackId: myAsyncCallBackId];
 
     }
 }
 
 
-- (NSString *)convertM4aToWav:(NSURL *)originalUrl outPath:(NSURL *)outPutUrl  {
+- (NSString *)convertM4aToWav:(NSURL *)originalUrl outPath:(NSURL *)outPutUrl outputFileType:(CTYOutputFileType  )outputFileType {
 
     AVURLAsset *songAsset = [AVURLAsset URLAssetWithURL:originalUrl options:nil];    //读取原始文件信息
     NSError *error = nil;
@@ -466,12 +501,14 @@ static CDVPluginResult *pluginResult = nil;
                 [assetWriterInput markAsFinished];
                 [assetWriter finishWritingWithCompletionHandler:^{
                     
-                    NSString *cacheDir = [NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES) objectAtIndex:0];
-                    NSString *outputPathMp3 = [NSString stringWithFormat:@"%@/%@%@%@", cacheDir, _audioFileName,@"_tmp", @".mp3"];
-                    NSURL *outputURLMp3 = [NSURL fileURLWithPath:outputPathMp3];
-                    [self convenrtToMp3WithResult :[outPutUrl absoluteString]   outPath: [outputURLMp3 absoluteString ]];
-                    
-                    
+                    if(outputFileType == MP3){
+                        NSString *cacheDir = [NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES) objectAtIndex:0];
+                        NSString *outputPathMp3 = [NSString stringWithFormat:@"%@/%@%@%@", cacheDir, _audioFileName,@"_tmp", @".mp3"];
+                        NSURL *outputURLMp3 = [NSURL fileURLWithPath:outputPathMp3];
+                        [self convertToMp3WithResult :[outPutUrl absoluteString]   outPath: [outputURLMp3 absoluteString ]];                    
+                    }else{
+                           [self sendCmd : [outPutUrl absoluteString]  keepCallback:NO ];
+                    }
                 }];
                 [assetReader cancelReading];
               
@@ -709,7 +746,7 @@ static CDVPluginResult *pluginResult = nil;
             NSLog([NSString stringWithFormat:@"AVAssetExport running progress=%3.2f%%", progress]);
 
             NSMutableDictionary *dictionary = [[NSMutableDictionary alloc] init];
-            [dictionary setValue: [NSNumber numberWithDouble: progress] forKey: @"progress"];
+            [dictionary setValue: [NSNumber numberWithDouble: progress] forKey: @"progress"]; // 返回到不同的js回调函数
 
             CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary: dictionary];
 

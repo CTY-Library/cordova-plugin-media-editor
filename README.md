@@ -29,11 +29,11 @@ CTYMediaEditor.transcodeVideo(
     {
         fileUri: 'file-uri-here', // the path to the video on the device
         outputFileName: 'output-name', // the file name for the transcoded video
-        outputFileType: CTYMediaEditorOptions.OutputFileType.MPEG4, // android is always mp4
-        optimizeForNetworkUse: CTYMediaEditorOptions.OptimizeForNetworkUse.YES, // ios only
+        outputFileType: "MPEG4", // android is always mp4
+        optimizeForNetworkUse: 1, // ios only
         saveToLibrary: true, // optional, defaults to true
         deleteInputFile: false, // optional (android only), defaults to false
-        maintainAspectRatio: true, // optional (ios only), defaults to true
+        maintainAspectRatio: true, // optional, defaults to true
         width: 640, // optional, see note below on width and height
         height: 640, // optional, see notes below on width and height
         videoBitrate: 1000000, // optional, bitrate in bits, defaults to 1 megabit (1000000)
@@ -58,22 +58,13 @@ Android will always use the aspect ratio of the input video to calculate the sca
 If you don't provide width and height to `transcodeVideo` the output video will have the same dimensions as the input video.
 
 #### transcodeVideo example -
-```javascript
+
 // options used with transcodeVideo function
-// CTYMediaEditorOptions is global, no need to declare it
-var CTYMediaEditorOptions = {
-    OptimizeForNetworkUse: {
-        NO: 0,
-        YES: 1
-    },
-    OutputFileType: {
-        M4V: 0,
-        MPEG4: 1,
-        M4A: 2,
-        QUICK_TIME: 3
-    }
-};
-```
+//  Support's type: 
+
+`M4V`,  `MP4`,  `MPEG4`, `M4A`, `QUICK_TIME`,  `WAV`,  `MP3` 
+
+
 ```javascript
 // this example uses the cordova media capture plugin
 navigator.device.capture.captureVideo(
@@ -99,8 +90,8 @@ function videoCaptureSuccess(mediaFiles) {
         {
             fileUri: file.fullPath,
             outputFileName: videoFileName,
-            outputFileType: CTYMediaEditorOptions.OutputFileType.MPEG4,
-            optimizeForNetworkUse: CTYMediaEditorOptions.OptimizeForNetworkUse.YES,
+            outputFileType: "MPEG4",
+            optimizeForNetworkUse: 1,
             saveToLibrary: true,
             maintainAspectRatio: true,
             width: 640,
@@ -136,8 +127,8 @@ CTYMediaEditor.transcodeAudio(
     {
         fileUri: 'file-uri-here', // the path to the audio on the device
         outputFileName: 'output-name', // the file name for the transcoded audio
-        outputFileType: CTYMediaEditorOptions.OutputFileType.MP3, // android is always mp3
-        optimizeForNetworkUse: CTYMediaEditorOptions.OptimizeForNetworkUse.YES, // ios only
+        outputFileType: "MP3", // android is always mp3
+        optimizeForNetworkUse: 1, // ios only
         saveToLibrary: true, // optional, defaults to true
         deleteInputFile: false, // optional (android only), defaults to false    
         audioChannels: 2, // optional (ios only), number of audio channels, defaults to 2

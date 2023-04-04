@@ -3,6 +3,7 @@ package org.apache.cordova.CTYMediaEditor;
 import java.io.*;
 import java.net.URL;
 import java.net.URLDecoder;
+import java.nio.ByteOrder;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
@@ -12,8 +13,11 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import android.graphics.Bitmap;
+
+import org.apache.cordova.CordovaInterface;
 import org.apache.cordova.CordovaPlugin;
 import org.apache.cordova.CallbackContext;
+import org.apache.cordova.CordovaWebView;
 import org.apache.cordova.LOG;
 import org.apache.cordova.PluginResult;
 import org.json.JSONArray;
@@ -39,6 +43,7 @@ import android.util.Log;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.RequiresApi;
 
 import com.linkedin.android.litr.MediaTransformer;
 import com.linkedin.android.litr.MimeType;
@@ -52,6 +57,7 @@ import com.linkedin.android.litr.io.MediaExtractorMediaSource;
 import com.linkedin.android.litr.io.MediaRange;
 import com.linkedin.android.litr.io.WavMediaTarget;
 import com.linkedin.android.litr.render.AudioRenderer;
+import com.mljsgto222.cordova.plugin.audiorecorder.SimpleLame;
 
 
 /**
@@ -63,6 +69,13 @@ public class CTYMediaEditor extends CordovaPlugin {
     private static final String TAG = "CTYMediaEditor";
 
     private CallbackContext callback;
+
+    @RequiresApi(api = Build.VERSION_CODES.M)
+    @Override
+    public void initialize(CordovaInterface cordova, CordovaWebView webView) {
+        super.initialize(cordova, webView);
+
+    }
 
     @Override
     public boolean execute(String action, JSONArray args, CallbackContext callbackContext) throws JSONException {
@@ -121,14 +134,14 @@ public class CTYMediaEditor extends CordovaPlugin {
                         audioBitrate = Integer.valueOf(m.extractMetadata(MediaMetadataRetriever.METADATA_KEY_BITRATE));
                     }
                     sampleRate = sampleRate==0?trackFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE):sampleRate;//获取比特
-                    channelCount = channelCount==0? trackFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT) : channelCount;//获取声道数量
+                    channelCount = 1;//  channelCount==0? trackFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT) : channelCount;//获取声道数量
                     MediaFormat mediaFormat = MediaFormat.createAudioFormat(
                             MimeType.AUDIO_RAW,
                             sampleRate,
                             channelCount
                     );
                     mediaFormat.setInteger(MediaFormat.KEY_BIT_RATE, audioBitrate);
-                    PassthroughBufferEncoder encoder = new PassthroughBufferEncoder(8192); // else MediaCodecEncoder()
+                    PassthroughBufferEncoder encoder = new PassthroughBufferEncoder(8192);
                     TrackTransform trackTransform = new TrackTransform.Builder(
                                     mediaSource,
                                     i,
@@ -147,14 +160,13 @@ public class CTYMediaEditor extends CordovaPlugin {
             }
 
             MediaTransformer mediaTransformer = new MediaTransformer(cordova.getContext());
-            TransformationListener transformationListener = getTransformationListener(true,mediaTransformer, () -> {
+            TransformationListener transformationListener = getTransformationListener(false,mediaTransformer, () -> {
                 if(deleteInputFile){
                     // 删除原文件
                     inFile.delete();
                     Log.d(TAG, "delete inFile:"+inFile.getAbsolutePath());
                 }
                 successCallback.run();
-                //callback.success(outputFilePath);
             });
             mediaTransformer.transform(
                 UUID.randomUUID().toString(),
@@ -176,28 +188,138 @@ public class CTYMediaEditor extends CordovaPlugin {
         int sampleRate = options.optInt("sampleRate", 44100); //样本率
         int channelCount = options.optInt("channelCount", 2); //通道
         int audioBitrate =  options.optInt("audioBitrate", 64*1024); //比特率
+        String outputFileType = options.optString("outputFileType", "MP3").toUpperCase();
         File inFile = this.resolveLocalFileSystemURI(options.getString("fileUri"));
 
         if (!inFile.exists()) {
             Log.d(TAG, "input file does not exist");
             callback.error("input audio does not exist.");
             return;
-        } 
-
-       String outputFilePath = getOutputFile(options, "audio", ".mp3");
+        }
+        if(!outputFileType.equals("M4A")){
+            outputFileType = "MP3";
+        }
+       String outputFilePath = getOutputFile(options, "audio", outputFileType.equals("MP3")?".mp3":".m4a");
        if(outputFilePath.equals("")){
             return;
        }
-
-        String wavTempFilePath = getOutputFile(options, "audio", ".wav");
-        if(wavTempFilePath.equals("")){
-            return;
+        if(outputFileType=="MP3") {
+            String wavTempFilePath = getOutputFile(options, "audio", ".wav");
+            if(wavTempFilePath.equals("")){
+                return;
+            }
+            transcodeAudioToWav(inFile, wavTempFilePath, deleteInputFile, sampleRate, channelCount, audioBitrate, 0, 0, () -> {
+                try {
+                    transcodeWavToMp3(wavTempFilePath, outputFilePath, sampleRate, channelCount, audioBitrate);
+                    File wavFile = new File(wavTempFilePath);
+                    wavFile.delete();
+                    callback.success(outputFilePath);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            });
         }
+        else {
+            transcodeAudioToM4a( inFile,  outputFilePath,  sampleRate,  channelCount,  audioBitrate,   () -> {
+                if (deleteInputFile) {
+                    // 删除原文件
+                    inFile.delete();
+                    Log.d(TAG, "delete inFile:" + inFile.getAbsolutePath());
+                }
+                callback.success(outputFilePath);
+            });
+        }
+    }
 
-        transcodeAudioToWav(inFile,  wavTempFilePath,   deleteInputFile, sampleRate, channelCount,audioBitrate, 0,   0,()->{
-            //success
+    private  void transcodeAudioToM4a( File inFile,String outputFilePath,int sampleRate,int channelCount,int audioBitrate,   Runnable successCallback) throws IOException {
+
+
+        cordova.getThreadPool().execute(new Runnable() {
+            public void run() {
+                try {
+                    // 指定编码器颜色格式
+                    MediaFormat targetVideoFormat = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, 0, 0);
+                    targetVideoFormat.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
+                    // 指定帧率
+                    targetVideoFormat.setInteger(MediaFormat.KEY_FRAME_RATE, 24);
+                    // 指定比特率
+                    targetVideoFormat.setInteger(MediaFormat.KEY_BIT_RATE, 1000000);
+                    //指定关键帧时间间隔，一般设置为每秒关键帧
+                    targetVideoFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1);
+
+                    MediaFormat targetAudioFormat = MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_AAC,sampleRate, channelCount);
+                    targetAudioFormat.setInteger(MediaFormat.KEY_BIT_RATE, audioBitrate);
+
+                    MediaTransformer mediaTransformer = new MediaTransformer(cordova.getContext());
+                    TransformationListener listener = getTransformationListener(true,mediaTransformer,new Runnable() {
+                        public void run() {
+                            successCallback.run();
+                        }
+                    });
+
+                    TransformationOptions opt = null;// new TransformationOptions(1,null,null,null,false,false); //todo 参数设置 ?
+                    mediaTransformer.transform(UUID.randomUUID().toString(), Uri.fromFile(inFile),outputFilePath,targetVideoFormat,targetAudioFormat,listener,opt);
+
+                } catch (Throwable e) {
+                    Log.d(TAG, "transcode exception ", e);
+                    callback.error(e.toString());
+                }
+            }
         });
+    }
 
+    private void transcodeWavToMp3(String inputFilePath,String outputFilePath,int sampleRate,int channelCount,int audioBitrate) throws IOException {
+
+        File inputFile = new File(inputFilePath);
+        File outputFile = new File(outputFilePath);
+        FileInputStream  inFileStream = new FileInputStream(inputFile);
+        FileOutputStream outFileStream = new FileOutputStream(outputFile);
+
+       byte[]  inBuffer = new  byte[8192*2];
+       byte[]  outBuffer = new  byte[(int)(7200 + (1.25 * 8192))];
+       int readCount=0;
+       int writeCount =0;
+       short[] inShortBuffer = new short[8192];
+       try {
+
+           int result = SimpleLame.init(sampleRate, channelCount, sampleRate, audioBitrate/1000,9);
+           if (result < 0) {
+               Log.d(TAG, "init fail SimpleLame:" + result);
+           }
+           do {
+               readCount = inFileStream.read(inBuffer);
+               if (readCount <= 0) {
+                   writeCount = SimpleLame.flush(outBuffer);
+               } else {
+                  byteArray2ShortArray(inBuffer,inShortBuffer );
+                  writeCount = SimpleLame.encode(inShortBuffer, inShortBuffer, readCount / 2, outBuffer);
+               }
+
+               if (writeCount > 0) {
+                   outFileStream.write(outBuffer, 0, writeCount);
+               }
+           }
+           while (readCount >0);
+           SimpleLame.close();
+
+           inFileStream.close();
+           outFileStream.flush();
+           outFileStream.close();
+       }
+       catch(Throwable e) {
+           Log.d(TAG, "transcodeWavToMp3 exception ", e);
+           SimpleLame.close();
+           inFileStream.close();
+           outFileStream.close();
+       }
+
+    }
+
+    // byte数组转short数组
+    private static  void byteArray2ShortArray(byte[] data,short[] inShortBuffer  )
+    {
+       for (int i = 0; i < inShortBuffer.length ;   i++)
+                inShortBuffer[i] = (short) ((data[i * 2] & 0xff) | (data[i * 2 + 1] & 0xff) << 8);
     }
 
 
@@ -221,7 +343,7 @@ public class CTYMediaEditor extends CordovaPlugin {
         int fps = options.optInt("fps", 24);
         int videoBitrate = options.optInt("videoBitrate", 1000000); // default to 1 megabit
         long videoDuration = options.optLong("duration", 1000 * 1000);
-        
+
         int sampleRate = options.optInt("sampleRate", 44100); //样本率
         int channelCount = options.optInt("channelCount", 2); //通道
         int audioBitrate =  options.optInt("audioBitrate", 64*1024); //比特率
@@ -272,10 +394,10 @@ public class CTYMediaEditor extends CordovaPlugin {
                   targetVideoFormat.setInteger(MediaFormat.KEY_BIT_RATE, videoBitrate);
                   //指定关键帧时间间隔，一般设置为每秒关键帧
                   targetVideoFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1);
-  
+
                   MediaFormat targetAudioFormat = MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_AAC,sampleRate, channelCount);
                   targetAudioFormat.setInteger(MediaFormat.KEY_BIT_RATE, audioBitrate);
-  
+
                   MediaTransformer mediaTransformer = new MediaTransformer(cordova.getContext());
                     TransformationListener listener = getTransformationListener(true,mediaTransformer,new Runnable() {
                         public void run() {
@@ -290,7 +412,7 @@ public class CTYMediaEditor extends CordovaPlugin {
 
                   TransformationOptions opt = null;// new TransformationOptions(1,null,null,null,false,false); //todo 参数设置 ?
                   mediaTransformer.transform(UUID.randomUUID().toString(), Uri.fromFile(inFile),outputFilePath,targetVideoFormat,targetAudioFormat,listener,opt);
-  
+
                   //PluginResult progressResult = new PluginResult(PluginResult.Status.OK, outputFilePath);
                   //progressResult.setKeepCallback(true);
                   //callback.sendPluginResult(progressResult);
@@ -320,7 +442,7 @@ public class CTYMediaEditor extends CordovaPlugin {
         if (saveToLibrary) {
             mediaStorageDir = new File(Environment.getExternalStorageDirectory() + (mediaType.equals("video")?"/Movies":"/Music"), appName);
         } else {
-            mediaStorageDir = new File(Environment.getExternalStorageDirectory().getAbsolutePath() + "/Android/data/" + cordova.getActivity().getPackageName() 
+            mediaStorageDir = new File(Environment.getExternalStorageDirectory().getAbsolutePath() + "/Android/data/" + cordova.getActivity().getPackageName()
             + (mediaType.equals("video")?"/files/videos":"/files/audios"));
         }
 
@@ -332,7 +454,7 @@ public class CTYMediaEditor extends CordovaPlugin {
         }
 
         String outputFilePath = new File(mediaStorageDir.getPath(), outputFileName + outputExtension).getAbsolutePath();
-        Log.d(TAG, "outputFilePath: " + outputFilePath);       
+        Log.d(TAG, "outputFilePath: " + outputFilePath);
         return outputFilePath;
     }
 
@@ -342,41 +464,39 @@ public class CTYMediaEditor extends CordovaPlugin {
             public void onStarted(@NonNull String id) {
                 Log.d(TAG, "TransformationListener onStarted");
             }
-    
+
             @Override
             public void onProgress(@NonNull String id, float progress) {
                 Log.d(TAG, "TransformationListener onProgress");
                 if(outputProgress){
-                    PluginResult progressResult = new PluginResult(PluginResult.Status.OK, progress); //Float.toString(progress)
+                    JSONObject result = new JSONObject(); //返回到不同的js回调函数
+                    try {
+                        result.put("progress",progress*100);
+                    } catch (JSONException e) {
+                        throw new RuntimeException(e);
+                    }
+                    PluginResult progressResult = new PluginResult(PluginResult.Status.OK,  result);
                     progressResult.setKeepCallback(true);
-                    //callback.sendPluginResult(progressResult);
+                    callback.sendPluginResult(progressResult);
+
                 }
             }
-    
+
             @Override
             public void onCompleted(@NonNull String id, @Nullable List<TrackTransformationInfo> trackTransformationInfos) {
                 mediaTransformer.release();
                 successCallback.run();
-                // if(deleteInputFile){
-                //     // 删除原文件
-                //     inFile.delete();
-                //     Log.d(TAG, "delete inFile:"+inFile.getAbsolutePath());
-                // }
-                // callback.success(outputFilePath);
                 Log.d(TAG, "TransformationListener onCompleted");
             }
-    
+
             @Override
             public void onCancelled(@NonNull String id, @Nullable List<TrackTransformationInfo> trackTransformationInfos) {
-    
+
             }
-    
+
             @Override
             public void onError(@NonNull String id, @Nullable Throwable cause, @Nullable List<TrackTransformationInfo> trackTransformationInfos) {
                 mediaTransformer.release();
-                //PluginResult progressResult = new PluginResult(PluginResult.Status.OK, "error");
-                //progressResult.setKeepCallback(true);
-                //callback.sendPluginResult(progressResult);
                 Log.d(TAG, "TransformationListener onError");
                 callback.error("error");
             }

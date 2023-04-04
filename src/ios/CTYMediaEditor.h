@@ -31,5 +31,5 @@ typedef NSUInteger CTYOutputFileType;
 - (void) getVideoInfo:(CDVInvokedUrlCommand*)command;
 - (void) trimVideo:(CDVInvokedUrlCommand*)command;
 
-- (void) sendCmd : (NSString *)msg;
+- (void) sendCmd : (NSString *)msg keepCallback: (BOOL ) keepCallback;
 @end
