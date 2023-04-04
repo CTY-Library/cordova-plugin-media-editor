@@ -56,8 +56,7 @@ import com.linkedin.android.litr.codec.PassthroughBufferEncoder;
 import com.linkedin.android.litr.io.MediaExtractorMediaSource;
 import com.linkedin.android.litr.io.MediaRange;
 import com.linkedin.android.litr.io.WavMediaTarget;
-import com.linkedin.android.litr.render.AudioRenderer;
-import com.mljsgto222.cordova.plugin.audiorecorder.SimpleLame;
+import com.linkedin.android.litr.render.AudioRenderer; 
 
 
 /**
@@ -282,17 +281,17 @@ public class CTYMediaEditor extends CordovaPlugin {
        short[] inShortBuffer = new short[8192];
        try {
 
-           int result = SimpleLame.init(sampleRate, channelCount, sampleRate, audioBitrate/1000,9);
+           int result = Mp3LameWraper.init(sampleRate, channelCount, sampleRate, audioBitrate/1000,9);
            if (result < 0) {
-               Log.d(TAG, "init fail SimpleLame:" + result);
+               Log.d(TAG, "init fail Mp3LameWraper:" + result);
            }
            do {
                readCount = inFileStream.read(inBuffer);
                if (readCount <= 0) {
-                   writeCount = SimpleLame.flush(outBuffer);
+                   writeCount = Mp3LameWraper.flush(outBuffer);
                } else {
                   byteArray2ShortArray(inBuffer,inShortBuffer );
-                  writeCount = SimpleLame.encode(inShortBuffer, inShortBuffer, readCount / 2, outBuffer);
+                  writeCount = Mp3LameWraper.encode(inShortBuffer, inShortBuffer, readCount / 2, outBuffer);
                }
 
                if (writeCount > 0) {
@@ -300,7 +299,7 @@ public class CTYMediaEditor extends CordovaPlugin {
                }
            }
            while (readCount >0);
-           SimpleLame.close();
+           Mp3LameWraper.close();
 
            inFileStream.close();
            outFileStream.flush();
@@ -308,7 +307,7 @@ public class CTYMediaEditor extends CordovaPlugin {
        }
        catch(Throwable e) {
            Log.d(TAG, "transcodeWavToMp3 exception ", e);
-           SimpleLame.close();
+           Mp3LameWraper.close();
            inFileStream.close();
            outFileStream.close();
        }
