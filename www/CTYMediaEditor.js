@@ -60,16 +60,5 @@ CTYMediaEditor.prototype.getVideoInfo = function(success, error, options) {
   exec(success, error, pluginName, 'getVideoInfo', [options]);
 };
 
-CTYMediaEditor.prototype.execFFMPEG = function(success, error, options) {
-  var msg = 'execFFMPEG has been removed as of v1.1.0';
-  console.log(msg);
-  error(msg);
-};
-
-CTYMediaEditor.prototype.execFFPROBE = function(success, error, options) {
-  var msg = 'ffprobe has been removed as of v1.0.9';
-  console.log(msg);
-  error(msg);
-};
 
 module.exports = new CTYMediaEditor();
