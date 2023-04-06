@@ -15,7 +15,7 @@ This plugin will address those concerns, hopefully.
 ```
 cordova plugin add cordova-plugin-media-editor
 ```
-`CTYMediaEditor` and `CTYMediaEditorOptions` will be available in the window after deviceready.
+`CTYMediaEditor`  will be available in the window after deviceready.
 
 ## Usage
 
@@ -289,7 +289,7 @@ FFmpeg has been removed from android for several reasons but mainly for performa
 
 
 ## Acknowledgments
-A huge thank you to [jbavari](https://github.com/jbavari) for his pioneering work on [cordova-plugin-video-edAitor](https://github.com/jbavari/cordova-plugin-video-edAitor) project, which was an inspiration and heavy influence on cordova-plugin-media-editor
+A huge thank you to [jbavari](https://github.com/jbavari) for his pioneering work on [cordova-plugin-video-editor](https://github.com/jbavari/cordova-plugin-video-edAitor) project, which was an inspiration and heavy influence on cordova-plugin-media-editor
 
 
 ## License
