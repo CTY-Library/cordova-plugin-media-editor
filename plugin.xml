@@ -32,9 +32,9 @@
         <source-file src="src/android/CTYMediaEditor.java" target-dir="src/org/apache/cordova/CTYMediaEditor" />
         <source-file src="src/android/Mp3LameWraper.java" target-dir="src/org/apache/cordova/CTYMediaEditor" />        
 
-        <source-file src="src/android/libs/armeabi/libmp3lame.so" target-dir="libs/armeabi" />
-        <source-file src="src/android/libs/armeabi-v7a/libmp3lame.so" target-dir="libs/armeabi-v7a" />
-        <source-file src="src/android/libs/arm64-v8a/libmp3lame.so" target-dir="libs/arm64-v8a" />
+   
+        <source-file src="src/android/libs/armeabi-v7a/libctymp3lame.so" target-dir="libs/armeabi-v7a" />
+        <source-file src="src/android/libs/arm64-v8a/libctymp3lame.so" target-dir="libs/arm64-v8a" />
 
         <framework src="src/android/CTYMediaEditor.gradle" custom="true" type="gradleReference" />   
     </platform>
@@ -63,10 +63,10 @@
         <framework src="MediaPlayer.framework" />
         <framework src="CoreVideo.framework" />
 
+        <!-- 以下两个配置,需手动设置 -->
         <config-file target="*-Info.plist" parent="Supports opening documents in place"> 
              <Boolean>YES</Boolean>  
-         </config-file> 
-
+         </config-file>
         <config-file target="*-Info.plist" parent="Application supports iTunes file sharing">  
             <Boolean>YES</Boolean>  
           </config-file>  
