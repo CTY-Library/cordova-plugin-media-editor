@@ -53,8 +53,6 @@
         <source-file src="src/ios/SDAVAssetExportSession.m" />
 
         <header-file src="src/ios/lame.h" />
-        <header-file src="src/ios/SimpleLame.h" />
-        <source-file src="src/ios/SimpleLame.m" />
 
         <source-file src="src/ios/libs/libmp3lame/libmp3lame.a" framework="true" />  
         
@@ -65,10 +63,10 @@
 
 
         <config-file target="*-Info.plist" parent="Supports opening documents in place"> 
-             <true>YES</true>  
+             <true/> 
          </config-file>
         <config-file target="*-Info.plist" parent="Application supports iTunes file sharing">  
-            <true>YES</true>  
+            <true/>
           </config-file>  
     </platform>
 
