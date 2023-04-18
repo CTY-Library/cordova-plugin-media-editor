@@ -63,12 +63,12 @@
         <framework src="MediaPlayer.framework" />
         <framework src="CoreVideo.framework" />
 
-        <!-- 以下两个配置,需手动设置 -->
+
         <config-file target="*-Info.plist" parent="Supports opening documents in place"> 
-             <Boolean>YES</Boolean>  
+             <true>YES</true>  
          </config-file>
         <config-file target="*-Info.plist" parent="Application supports iTunes file sharing">  
-            <Boolean>YES</Boolean>  
+            <true>YES</true>  
           </config-file>  
     </platform>
 
