@@ -1,5 +1,6 @@
 package org.apache.cordova.CTYMediaEditor;
 
+import android.Manifest;
 import java.io.*;
 import java.net.URL;
 import java.net.URLDecoder;
@@ -19,18 +20,22 @@ import org.apache.cordova.CordovaPlugin;
 import org.apache.cordova.CallbackContext;
 import org.apache.cordova.CordovaWebView;
 import org.apache.cordova.LOG;
+import org.apache.cordova.PermissionHelper;
 import org.apache.cordova.PluginResult;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import android.content.ContentResolver;
 import android.content.ContentUris;
 import android.content.Context;
+import android.content.Intent;
 
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.database.Cursor;
+import android.media.MediaScannerConnection;
 import android.media.MediaCodecInfo;
 import android.media.MediaFormat;
 import android.media.MediaMetadataRetriever;
@@ -39,6 +44,8 @@ import android.os.Build;
 import android.os.Environment;
 import android.provider.DocumentsContract;
 import android.provider.MediaStore;
+import android.provider.OpenableColumns;
+import android.provider.Settings;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
@@ -66,8 +73,15 @@ import com.linkedin.android.litr.render.AudioRenderer;
 public class CTYMediaEditor extends CordovaPlugin {
 
     private static final String TAG = "CTYMediaEditor";
+    private static final int REQUEST_CODE_READ_VIDEO = 4101;
+    private static final int REQUEST_CODE_READ_AUDIO = 4102;
+    private static final int REQUEST_CODE_WRITE_SETTINGS = 4103;
+    private static final int REQUEST_CODE_MANAGE_EXTERNAL_STORAGE = 4104;
 
     private CallbackContext callback;
+    private CallbackContext pendingCallback;
+    private String pendingAction;
+    private JSONArray pendingArgs;
 
     @RequiresApi(api = Build.VERSION_CODES.M)
     @Override
@@ -82,37 +96,246 @@ public class CTYMediaEditor extends CordovaPlugin {
 
         this.callback = callbackContext;
 
+        if (requiresReadPermission(action) && !hasReadPermission(action)) {
+            cachePendingRequest(action, args, callbackContext);
+            requestReadPermission(action);
+            return true;
+        }
+
+        if (requiresReadPermission(action) && !hasSpecialPermissions()) {
+            cachePendingRequest(action, args, callbackContext);
+            requestSpecialPermission();
+            return true;
+        }
+
         if (action.equals("transcodeVideo")) {
             try {
                 this.transcodeVideo(args);
-            } catch (IOException e) {
+            } catch (Throwable e) {
+                Log.e(TAG, "transcodeVideo failed", e);
                 callback.error(e.toString());
             }
             return true;
         } if (action.equals("transcodeAudio")) {
             try {
                 this.transcodeAudio(args);
-            } catch (IOException e) {
+            } catch (Throwable e) {
+                Log.e(TAG, "transcodeAudio failed", e);
                 callback.error(e.toString());
             }
             return true;
         } else if (action.equals("createThumbnail")) {
             try {
                 this.createThumbnail(args);
-            } catch (IOException e) {
+            } catch (Throwable e) {
+                Log.e(TAG, "createThumbnail failed", e);
                 callback.error(e.toString());
             }
             return true;
         } else if (action.equals("getVideoInfo")) {
             try {
                 this.getVideoInfo(args);
-            } catch (IOException e) {
+            } catch (Throwable e) {
+                Log.e(TAG, "getVideoInfo failed", e);
                 callback.error(e.toString());
             }
             return true;
         }
 
         return false;
+    }
+
+    @Override
+    public void onRequestPermissionResult(int requestCode, String[] permissions, int[] grantResults) throws JSONException {
+        try {
+            super.onRequestPermissionResult(requestCode, permissions, grantResults);
+        } catch (Throwable ignore) {
+            Log.w(TAG, "super.onRequestPermissionResult failed", ignore);
+        }
+
+        if (requestCode != REQUEST_CODE_READ_VIDEO && requestCode != REQUEST_CODE_READ_AUDIO) {
+            return;
+        }
+
+        CallbackContext cb = pendingCallback != null ? pendingCallback : callback;
+        if (cb == null) {
+            clearPendingRequest();
+            Log.e(TAG, "Permission callback lost, pending callback is null");
+            return;
+        }
+
+        if (cordova == null || cordova.getActivity() == null || cordova.getActivity().isFinishing()) {
+            clearPendingRequest();
+            cb.error("授权后页面已失效，请重试");
+            return;
+        }
+        this.callback = cb;
+
+        if (grantResults == null || grantResults.length == 0) {
+            clearPendingRequest();
+            cb.error("读取媒体文件权限被拒绝");
+            return;
+        }
+
+        for (int grantResult : grantResults) {
+            if (grantResult == PackageManager.PERMISSION_DENIED) {
+                clearPendingRequest();
+                cb.error("读取媒体文件权限被拒绝");
+                return;
+            }
+        }
+
+        if (pendingAction == null || pendingArgs == null) {
+            clearPendingRequest();
+            return;
+        }
+
+        String action = pendingAction;
+        JSONArray args = pendingArgs;
+        clearPendingRequest();
+        try {
+            executePendingAction(action, args);
+        } catch (Throwable e) {
+            Log.e(TAG, "Failed to execute pending action after permission grant", e);
+            cb.error("授权后恢复执行失败: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, Intent intent) {
+        if (requestCode != REQUEST_CODE_WRITE_SETTINGS && requestCode != REQUEST_CODE_MANAGE_EXTERNAL_STORAGE) {
+            return;
+        }
+
+        CallbackContext cb = pendingCallback != null ? pendingCallback : callback;
+        if (cb == null) {
+            clearPendingRequest();
+            Log.e(TAG, "ActivityResult callback lost, pending callback is null");
+            return;
+        }
+
+        if (!hasSpecialPermissions()) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.System.canWrite(cordova.getActivity())) {
+                cb.error("请开启系统设置修改权限");
+            } else {
+                cb.error("请开启所有文件访问权限");
+            }
+            clearPendingRequest();
+            return;
+        }
+
+        if (pendingAction == null || pendingArgs == null) {
+            clearPendingRequest();
+            return;
+        }
+
+        String action = pendingAction;
+        JSONArray args = pendingArgs;
+        clearPendingRequest();
+        this.callback = cb;
+        try {
+            executePendingAction(action, args);
+        } catch (Throwable e) {
+            Log.e(TAG, "Failed to execute pending action after special permission grant", e);
+            cb.error("授权后恢复执行失败: " + e.getMessage());
+        }
+    }
+
+    private void cachePendingRequest(String action, JSONArray args, CallbackContext callbackContext) {
+        this.pendingAction = action;
+        this.pendingArgs = args;
+        this.callback = callbackContext;
+        this.pendingCallback = callbackContext;
+
+        PluginResult pendingResult = new PluginResult(PluginResult.Status.NO_RESULT);
+        pendingResult.setKeepCallback(true);
+        callbackContext.sendPluginResult(pendingResult);
+    }
+
+    private void clearPendingRequest() {
+        this.pendingAction = null;
+        this.pendingArgs = null;
+        this.pendingCallback = null;
+    }
+
+    private boolean requiresReadPermission(String action) {
+        return action.equals("transcodeVideo")
+                || action.equals("transcodeAudio")
+                || action.equals("createThumbnail")
+                || action.equals("getVideoInfo");
+    }
+
+    private boolean hasReadPermission(String action) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            return PermissionHelper.hasPermission(this, getReadPermissionForAction(action));
+        }
+        return PermissionHelper.hasPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE);
+    }
+
+    private void requestReadPermission(String action) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            String permission = getReadPermissionForAction(action);
+            int requestCode = action.equals("transcodeAudio") ? REQUEST_CODE_READ_AUDIO : REQUEST_CODE_READ_VIDEO;
+            PermissionHelper.requestPermission(this, requestCode, permission);
+        } else {
+            PermissionHelper.requestPermission(this, REQUEST_CODE_READ_VIDEO, Manifest.permission.READ_EXTERNAL_STORAGE);
+        }
+    }
+
+    private String getReadPermissionForAction(String action) {
+        if (action.equals("transcodeAudio")) {
+            return Manifest.permission.READ_MEDIA_AUDIO;
+        }
+        return Manifest.permission.READ_MEDIA_VIDEO;
+    }
+
+    private boolean hasSpecialPermissions() {
+        return hasWriteSettingsPermission() && hasManageExternalStoragePermission();
+    }
+
+    private boolean hasWriteSettingsPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            return true;
+        }
+        return Settings.System.canWrite(cordova.getActivity());
+    }
+
+    private boolean hasManageExternalStoragePermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            return true;
+        }
+        return Environment.isExternalStorageManager();
+    }
+
+    private void requestSpecialPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !hasWriteSettingsPermission()) {
+            Intent intent = new Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS,
+                    Uri.parse("package:" + cordova.getActivity().getPackageName()));
+            cordova.startActivityForResult(this, intent, REQUEST_CODE_WRITE_SETTINGS);
+            return;
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !hasManageExternalStoragePermission()) {
+            Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                    Uri.parse("package:" + cordova.getActivity().getPackageName()));
+            cordova.startActivityForResult(this, intent, REQUEST_CODE_MANAGE_EXTERNAL_STORAGE);
+        }
+    }
+
+    private void executePendingAction(String action, JSONArray args) throws JSONException {
+        try {
+            if (action.equals("transcodeVideo")) {
+                this.transcodeVideo(args);
+            } else if (action.equals("transcodeAudio")) {
+                this.transcodeAudio(args);
+            } else if (action.equals("createThumbnail")) {
+                this.createThumbnail(args);
+            } else if (action.equals("getVideoInfo")) {
+                this.getVideoInfo(args);
+            }
+        } catch (IOException e) {
+            callback.error(e.toString());
+        }
     }
 
     private void transcodeAudioToWav(File inFile, String outputFilePath, boolean deleteInputFile,int sampleRate,int channelCount,int audioBitrate,long startMillSeconds, long endMillSeconds ,  Runnable successCallback)  throws JSONException, IOException {
@@ -212,6 +435,8 @@ public class CTYMediaEditor extends CordovaPlugin {
                     transcodeWavToMp3(wavTempFilePath, outputFilePath, sampleRate, channelCount, audioBitrate);
                     File wavFile = new File(wavTempFilePath);
                     wavFile.delete();
+                    logOutputFileResult(outputFilePath, "transcodeAudio-mp3");
+                    notifyMediaLibrary(outputFilePath, "audio/mpeg");
                     callback.success(outputFilePath);
                 } catch (IOException e) {
                     throw new RuntimeException(e);
@@ -225,6 +450,8 @@ public class CTYMediaEditor extends CordovaPlugin {
                     inFile.delete();
                     Log.d(TAG, "delete inFile:" + inFile.getAbsolutePath());
                 }
+                logOutputFileResult(outputFilePath, "transcodeAudio-m4a");
+                notifyMediaLibrary(outputFilePath, "audio/mp4");
                 callback.success(outputFilePath);
             });
         }
@@ -405,6 +632,8 @@ public class CTYMediaEditor extends CordovaPlugin {
                                 inFile.delete();
                                 Log.d(TAG, "delete inFile:" + inFile.getAbsolutePath());
                             }
+                            logOutputFileResult(outputFilePath, "transcodeVideo");
+                            notifyMediaLibrary(outputFilePath, "video/mp4");
                             callback.success(outputFilePath);
                         }
                     });
@@ -438,8 +667,15 @@ public class CTYMediaEditor extends CordovaPlugin {
         final boolean saveToLibrary = options.optBoolean("saveToLibrary", true);
         File mediaStorageDir;
 
-        if (saveToLibrary) {
-            mediaStorageDir = new File(Environment.getExternalStorageDirectory() + (mediaType.equals("video")?"/Movies":"/Music"), appName);
+        // 视频输出到DCIM/Camera以获得更好的相册兼容性，音频直接输出到公共Music目录。
+        if (mediaType.equals("video") || mediaType.equals("audio") || saveToLibrary) {
+            if (mediaType.equals("video")) {
+                mediaStorageDir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "Camera");
+            } else if (mediaType.equals("audio")) {
+                mediaStorageDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC);
+            } else {
+                mediaStorageDir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC), appName);
+            }
         } else {
             mediaStorageDir = new File(Environment.getExternalStorageDirectory().getAbsolutePath() + "/Android/data/" + cordova.getActivity().getPackageName()
             + (mediaType.equals("video")?"/files/videos":"/files/audios"));
@@ -455,6 +691,39 @@ public class CTYMediaEditor extends CordovaPlugin {
         String outputFilePath = new File(mediaStorageDir.getPath(), outputFileName + outputExtension).getAbsolutePath();
         Log.d(TAG, "outputFilePath: " + outputFilePath);
         return outputFilePath;
+    }
+
+    private void logOutputFileResult(String outputFilePath, String scene) {
+        try {
+            File outputFile = new File(outputFilePath);
+            Log.i(TAG, "Output file check [" + scene + "] exists=" + outputFile.exists()
+                    + ", size=" + outputFile.length()
+                    + ", canRead=" + outputFile.canRead()
+                    + ", path=" + outputFile.getAbsolutePath());
+        } catch (Throwable t) {
+            Log.w(TAG, "Output file check failed [" + scene + "]: " + outputFilePath, t);
+        }
+    }
+
+    private void notifyMediaLibrary(String outputFilePath, String mimeType) {
+        try {
+            MediaScannerConnection.scanFile(
+                    cordova.getContext(),
+                    new String[]{outputFilePath},
+                    new String[]{mimeType},
+                    new MediaScannerConnection.OnScanCompletedListener() {
+                        @Override
+                        public void onScanCompleted(String path, Uri uri) {
+                            Log.i(TAG, "Media scan completed: path=" + path + ", uri=" + uri);
+                        }
+                    }
+            );
+            Intent scanIntent = new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE);
+            scanIntent.setData(Uri.fromFile(new File(outputFilePath)));
+            cordova.getContext().sendBroadcast(scanIntent);
+        } catch (Throwable t) {
+            Log.w(TAG, "Media scan failed: " + outputFilePath, t);
+        }
     }
 
     private TransformationListener getTransformationListener(boolean outputProgress, MediaTransformer mediaTransformer,  Runnable successCallback){
@@ -724,8 +993,12 @@ public class CTYMediaEditor extends CordovaPlugin {
         File fp = null;
 
         // Handle the special case where you get an Android content:// uri.
-        if (decoded.startsWith("content:")) {
-            fp = new File(getPath(this.cordova.getActivity().getApplicationContext(), Uri.parse(decoded)));
+        if (url.startsWith("content:")) {
+            Uri uri = Uri.parse(url);
+            fp = resolveContentUriToFile(uri);
+            if (fp == null) {
+                fp = copyContentUriToCache(uri);
+            }
         } else {
             // Test to see if this is a valid URL first
             //@SuppressWarnings("unused")
@@ -746,12 +1019,212 @@ public class CTYMediaEditor extends CordovaPlugin {
         }
 
         if (fp == null || !fp.exists()) {
-            throw new FileNotFoundException( "" + url + " -> " + fp.getCanonicalPath());
+            String resolvedPath = fp == null ? "null" : fp.getAbsolutePath();
+            throw new FileNotFoundException("" + url + " -> " + resolvedPath);
         }
         if (!fp.canRead()) {
             throw new IOException("can't read file: " + url + " -> " + fp.getCanonicalPath());
         }
         return fp;
+    }
+
+    private File resolveContentUriToFile(Uri uri) {
+        File externalFile = resolveExternalStorageDocumentFile(uri);
+        if (externalFile != null) {
+            Log.d(TAG, "Resolved external document uri to file: " + externalFile.getAbsolutePath());
+            return externalFile;
+        }
+
+        Context context = this.cordova.getActivity().getApplicationContext();
+        String path;
+        try {
+            path = getPath(context, uri);
+        } catch (Throwable e) {
+            Log.w(TAG, "resolveContentUriToFile failed: " + uri, e);
+            return null;
+        }
+        if (path == null || path.trim().isEmpty()) {
+            return null;
+        }
+
+        File file = new File(path);
+        return file.exists() ? file : null;
+    }
+
+    private File resolveExternalStorageDocumentFile(Uri uri) {
+        if (!isExternalStorageDocument(uri)) {
+            return null;
+        }
+
+        String docId = extractDocumentId(uri);
+        if (docId == null || docId.length() == 0) {
+            return null;
+        }
+
+        String[] split = docId.split(":", 2);
+        if (split.length < 2) {
+            return null;
+        }
+
+        String type = split[0];
+        String relativePath = split[1];
+        if (relativePath.startsWith("/")) {
+            relativePath = relativePath.substring(1);
+        }
+
+        List<String> candidates = new ArrayList<String>();
+        if ("primary".equalsIgnoreCase(type)) {
+            candidates.add(Environment.getExternalStorageDirectory() + "/" + relativePath);
+            candidates.add("/storage/emulated/0/" + relativePath);
+            candidates.add("/sdcard/" + relativePath);
+        } else if ("home".equalsIgnoreCase(type)) {
+            candidates.add(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS) + "/" + relativePath);
+            candidates.add("/storage/emulated/0/Documents/" + relativePath);
+            candidates.add("/sdcard/Documents/" + relativePath);
+        }
+
+        for (String candidate : candidates) {
+            File file = new File(candidate);
+            if (file.exists()) {
+                return file;
+            }
+        }
+
+        return null;
+    }
+
+    private String extractDocumentId(Uri uri) {
+        String docId = null;
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT && DocumentsContract.isDocumentUri(cordova.getActivity(), uri)) {
+                docId = DocumentsContract.getDocumentId(uri);
+            }
+        } catch (Throwable ignored) {
+        }
+
+        if (docId == null || docId.length() == 0) {
+            String uriString = uri.toString();
+            int markerIndex = uriString.indexOf("/document/");
+            if (markerIndex >= 0 && markerIndex + 10 < uriString.length()) {
+                docId = uriString.substring(markerIndex + 10);
+            }
+        }
+
+        if (docId == null || docId.length() == 0) {
+            String lastSegment = uri.getLastPathSegment();
+            if (lastSegment != null && lastSegment.length() > 0) {
+                docId = lastSegment;
+            }
+        }
+
+        if (docId == null || docId.length() == 0) {
+            return null;
+        }
+
+        try {
+            docId = URLDecoder.decode(docId, "UTF-8");
+        } catch (UnsupportedEncodingException ignored) {
+        }
+
+        if (docId.startsWith("document/")) {
+            docId = docId.substring("document/".length());
+        }
+        return docId;
+    }
+
+    private File copyContentUriToCache(Uri uri) throws IOException {
+        Context context = this.cordova.getActivity().getApplicationContext();
+        File cacheDir = new File(context.getCacheDir(), "cty-media-editor");
+        if (!cacheDir.exists() && !cacheDir.mkdirs()) {
+            throw new IOException("Can't create cache dir: " + cacheDir.getAbsolutePath());
+        }
+
+        String displayName = getDisplayName(context, uri);
+        if (displayName == null || displayName.trim().isEmpty()) {
+            displayName = "media_" + System.currentTimeMillis();
+        }
+
+        File cacheFile = createUniqueFile(cacheDir, displayName);
+        ContentResolver resolver = context.getContentResolver();
+
+        try (InputStream inputStream = resolver.openInputStream(uri);
+             OutputStream outputStream = new FileOutputStream(cacheFile)) {
+            if (inputStream == null) {
+                throw new FileNotFoundException("Can't open input stream for uri: " + uri);
+            }
+
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = inputStream.read(buffer)) != -1) {
+                outputStream.write(buffer, 0, read);
+            }
+            outputStream.flush();
+        } catch (SecurityException e) {
+            throw new IOException("No permission to read uri: " + uri, e);
+        }
+
+        return cacheFile;
+    }
+
+    private File createUniqueFile(File directory, String fileName) throws IOException {
+        String safeName = fileName.replaceAll("[\\\\/:*?\"<>|]", "_");
+        File candidate = new File(directory, safeName);
+        if (!candidate.exists()) {
+            return candidate;
+        }
+
+        String name = safeName;
+        String extension = "";
+        int dotIndex = safeName.lastIndexOf('.');
+        if (dotIndex > 0) {
+            name = safeName.substring(0, dotIndex);
+            extension = safeName.substring(dotIndex);
+        }
+
+        int index = 1;
+        while (candidate.exists()) {
+            candidate = new File(directory, name + "(" + index + ")" + extension);
+            index++;
+        }
+        return candidate;
+    }
+
+    private String getDisplayName(Context context, Uri uri) {
+        if (isExternalStorageDocument(uri)) {
+            String documentId = DocumentsContract.getDocumentId(uri);
+            if (documentId != null) {
+                int separatorIndex = documentId.indexOf(':');
+                if (separatorIndex >= 0 && separatorIndex + 1 < documentId.length()) {
+                    String relativePath = documentId.substring(separatorIndex + 1);
+                    int slashIndex = relativePath.lastIndexOf('/');
+                    return slashIndex >= 0 ? relativePath.substring(slashIndex + 1) : relativePath;
+                }
+            }
+        }
+
+        Cursor cursor = null;
+        try {
+            cursor = context.getContentResolver().query(uri, new String[]{OpenableColumns.DISPLAY_NAME}, null, null, null);
+            if (cursor != null && cursor.moveToFirst()) {
+                int columnIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+                if (columnIndex >= 0) {
+                    return cursor.getString(columnIndex);
+                }
+            }
+        } catch (Exception e) {
+            Log.d(TAG, "Failed to query display name for uri: " + uri, e);
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+        }
+
+        String lastSegment = uri.getLastPathSegment();
+        if (lastSegment == null || lastSegment.trim().isEmpty()) {
+            return null;
+        }
+        int slashIndex = lastSegment.lastIndexOf('/');
+        return slashIndex >= 0 ? lastSegment.substring(slashIndex + 1) : lastSegment;
     }
 
     /**
@@ -764,6 +1237,11 @@ public class CTYMediaEditor extends CordovaPlugin {
      * @author paulburke
      */
     public static String getPath(final Context context, final Uri uri) {
+
+        String externalStoragePath = tryResolveExternalStoragePath(context, uri);
+        if (externalStoragePath != null) {
+            return externalStoragePath;
+        }
 
         final boolean isKitKat = Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT;
 
@@ -779,12 +1257,19 @@ public class CTYMediaEditor extends CordovaPlugin {
                     return Environment.getExternalStorageDirectory() + "/" + split[1];
                 }
 
+                if ("home".equalsIgnoreCase(type)) {
+                    return Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS) + "/" + split[1];
+                }
+
                 // TODO handle non-primary volumes
             }
             // DownloadsProvider
             else if (isDownloadsDocument(uri)) {
 
                 final String id = DocumentsContract.getDocumentId(uri);
+                if (id == null || id.length() == 0 || id.startsWith("raw:")) {
+                    return id != null && id.startsWith("raw:") ? id.replaceFirst("raw:", "") : null;
+                }
                 final Uri contentUri = ContentUris.withAppendedId(
                         Uri.parse("content://downloads/public_downloads"), Long.valueOf(id));
 
@@ -851,9 +1336,74 @@ public class CTYMediaEditor extends CordovaPlugin {
                 final int column_index = cursor.getColumnIndexOrThrow(column);
                 return cursor.getString(column_index);
             }
+        } catch (SecurityException e) {
+            Log.w(TAG, "No permission to query uri: " + uri, e);
+        } catch (IllegalArgumentException e) {
+            Log.w(TAG, "Invalid query for uri: " + uri, e);
+        } catch (RuntimeException e) {
+            Log.w(TAG, "Unexpected error when query uri: " + uri, e);
         } finally {
             if (cursor != null)
                 cursor.close();
+        }
+        return null;
+    }
+
+    private static String tryResolveExternalStoragePath(Context context, Uri uri) {
+        if (!isExternalStorageDocument(uri)) {
+            return null;
+        }
+
+        String docId = null;
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT && DocumentsContract.isDocumentUri(context, uri)) {
+                docId = DocumentsContract.getDocumentId(uri);
+            }
+        } catch (Throwable ignored) {
+            // ignore and fallback below
+        }
+
+        if (docId == null || docId.length() == 0) {
+            String uriString = uri.toString();
+            int markerIndex = uriString.indexOf("/document/");
+            if (markerIndex >= 0 && markerIndex + 10 < uriString.length()) {
+                docId = uriString.substring(markerIndex + 10);
+            }
+        }
+
+        if (docId == null || docId.length() == 0) {
+            String lastSegment = uri.getLastPathSegment();
+            if (lastSegment == null || lastSegment.length() == 0) {
+                return null;
+            }
+            docId = lastSegment;
+        }
+
+        try {
+            docId = URLDecoder.decode(docId, "UTF-8");
+        } catch (UnsupportedEncodingException e) {
+            // UTF-8 always exists, keep raw string as fallback
+        }
+
+        if (docId.startsWith("document/")) {
+            try {
+                docId = docId.substring("document/".length());
+            } catch (Throwable ignored) {
+            }
+        }
+
+        String[] split = docId.split(":", 2);
+        if (split.length < 2) {
+            return null;
+        }
+
+        String type = split[0];
+        String relativePath = split[1];
+        if ("primary".equalsIgnoreCase(type)) {
+            return Environment.getExternalStorageDirectory() + "/" + relativePath;
+        }
+        if ("home".equalsIgnoreCase(type)) {
+            return Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS) + "/" + relativePath;
         }
         return null;
     }
