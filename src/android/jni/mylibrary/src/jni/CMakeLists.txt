@@ -26,3 +26,6 @@ add_library(  ctymp3lame
         org_apache_cordova_CTYMediaEditor_Mp3LameWraper.c
         )
 include_directories(src/)
+
+# Ensure the generated shared library is compatible with 16KB page-size devices.
+set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384")

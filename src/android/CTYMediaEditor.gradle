@@ -4,6 +4,20 @@ repositories{
     maven { url "https://jitpack.io" }
 }
 
+def ctyNativeCmakePaths = [
+    // Cordova Android 14 layout: <app-root>/plugins/<plugin-id>/... while rootProject is <app-root>/platforms/android
+    file("${rootProject.projectDir}/../../plugins/cordova-plugin-media-editor/src/android/jni/mylibrary/src/jni/CMakeLists.txt"),
+    // Legacy/alternative copied locations used by some Cordova setups
+    file("${rootProject.projectDir}/../plugins/cordova-plugin-media-editor/src/android/jni/mylibrary/src/jni/CMakeLists.txt"),
+    file("${rootProject.projectDir}/../cordova-plugin-media-editor/src/android/jni/mylibrary/src/jni/CMakeLists.txt"),
+    file("${rootProject.projectDir}/cordova-plugin-media-editor/src/android/jni/mylibrary/src/jni/CMakeLists.txt")
+]
+def ctyNativeCmakePath = ctyNativeCmakePaths.find { it.exists() }
+
+if (ctyNativeCmakePath == null) {
+    throw new RuntimeException("cordova-plugin-media-editor: CMakeLists.txt not found for native build. Checked: ${ctyNativeCmakePaths}")
+}
+
 dependencies {
     implementation 'com.linkedin.android.litr:litr:1.5.5'
 }
@@ -12,5 +26,20 @@ android {
     packagingOptions {
         exclude 'META-INF/NOTICE'
         exclude 'META-INF/LICENSE'
+    }
+
+    defaultConfig {
+        externalNativeBuild {
+            cmake {
+                // Build only ABIs that this plugin ships Java/JNI code for.
+                abiFilters 'armeabi-v7a', 'arm64-v8a'
+            }
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path ctyNativeCmakePath
+        }
     }
 }
