@@ -46,6 +46,15 @@
             </feature>
         </config-file>
 
+        <preference name="PHOTO_LIBRARY_USAGE_DESCRIPTION" default="Allow access to your photo library." />
+        <preference name="PHOTO_LIBRARY_ADD_USAGE_DESCRIPTION" default="Allow saving media to your photo library." />
+        <config-file target="*-Info.plist" parent="NSPhotoLibraryUsageDescription">
+            <string>$PHOTO_LIBRARY_USAGE_DESCRIPTION</string>
+        </config-file>
+        <config-file target="*-Info.plist" parent="NSPhotoLibraryAddUsageDescription">
+            <string>$PHOTO_LIBRARY_ADD_USAGE_DESCRIPTION</string>
+        </config-file>
+
         <header-file src="src/ios/CTYMediaEditor.h" />
         <source-file src="src/ios/CTYMediaEditor.m" />
         <header-file src="src/ios/SDAVAssetExportSession.h" />
@@ -56,6 +65,7 @@
         <source-file src="src/ios/libs/libmp3lame/libmp3lame.a" framework="true" />  
         
         <framework src="AVFoundation.framework" />
+        <framework src="Photos.framework" />
         <framework src="MediaPlayer.framework" />
         <framework src="CoreVideo.framework" />
 

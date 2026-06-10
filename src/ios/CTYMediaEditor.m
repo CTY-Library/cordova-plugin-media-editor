@@ -7,6 +7,7 @@
 //
 
 #import <Cordova/CDV.h>
+#import <Photos/Photos.h>
 #import "CTYMediaEditor.h"
 #import "SDAVAssetExportSession.h"
 #import "lame.h"
@@ -21,6 +22,69 @@
 
 static NSString* myAsyncCallBackId = nil;
 static CDVPluginResult *pluginResult = nil;
+
+- (PHAuthorizationStatus)photoAuthorizationStatus
+{
+    if (@available(iOS 14, *)) {
+        return [PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelReadWrite];
+    }
+    return [PHPhotoLibrary authorizationStatus];
+}
+
+- (BOOL)isPhotoAuthorizationGranted:(PHAuthorizationStatus)status
+{
+    if (@available(iOS 14, *)) {
+        return status == PHAuthorizationStatusAuthorized || status == PHAuthorizationStatusLimited;
+    }
+    return status == PHAuthorizationStatusAuthorized;
+}
+
+- (void)requestPhotoLibraryAuthorization:(void (^)(PHAuthorizationStatus status))completion
+{
+    if (@available(iOS 14, *)) {
+        [PHPhotoLibrary requestAuthorizationForAccessLevel:PHAccessLevelReadWrite handler:^(PHAuthorizationStatus status) {
+            completion(status);
+        }];
+        return;
+    }
+
+    [PHPhotoLibrary requestAuthorization:^(PHAuthorizationStatus status) {
+        completion(status);
+    }];
+}
+
+- (void)hasPermission:(CDVInvokedUrlCommand*)command
+{
+    PHAuthorizationStatus status = [self photoAuthorizationStatus];
+    BOOL granted = [self isPhotoAuthorizationGranted:status];
+
+    CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsBool:granted];
+    [self.commandDelegate sendPluginResult:result callbackId:command.callbackId];
+}
+
+- (void)requestPermission:(CDVInvokedUrlCommand*)command
+{
+    PHAuthorizationStatus status = [self photoAuthorizationStatus];
+    if ([self isPhotoAuthorizationGranted:status]) {
+        CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsBool:YES];
+        [self.commandDelegate sendPluginResult:result callbackId:command.callbackId];
+        return;
+    }
+
+    if (status == PHAuthorizationStatusDenied || status == PHAuthorizationStatusRestricted) {
+        NSString *message = @"Access to photo library is denied or restricted.";
+        CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:message];
+        [self.commandDelegate sendPluginResult:result callbackId:command.callbackId];
+        return;
+    }
+
+    [self requestPhotoLibraryAuthorization:^(PHAuthorizationStatus requestStatus) {
+        BOOL granted = [self isPhotoAuthorizationGranted:requestStatus];
+        CDVCommandStatus commandStatus = granted ? CDVCommandStatus_OK : CDVCommandStatus_ERROR;
+        CDVPluginResult* result = [CDVPluginResult resultWithStatus:commandStatus messageAsBool:granted];
+        [self.commandDelegate sendPluginResult:result callbackId:command.callbackId];
+    }];
+}
 
 /**
  * transcodeVideo
@@ -678,6 +742,10 @@ static CDVPluginResult *pluginResult = nil;
  * @param CDVInvokedUrlCommand command
  * @return void
  */
+- (void) trim:(CDVInvokedUrlCommand*)command {
+    [self trimVideo:command];
+}
+
 - (void) trimVideo:(CDVInvokedUrlCommand*)command {
     NSLog(@"[Trim]: trim called");
 
@@ -872,7 +940,7 @@ static CDVPluginResult *pluginResult = nil;
         return @"";
     }
 
-    NSCharacterSet *allowedCharacterSet = [NSCharacterSet characterSetWithCharactersInString:@"!*'();:@&=+$,/?%#[]ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.~"];
+    NSCharacterSet *allowedCharacterSet = [NSCharacterSet URLQueryAllowedCharacterSet];
     NSString *encodedString = [string stringByAddingPercentEncodingWithAllowedCharacters:allowedCharacterSet];
     return encodedString ?: string;
 }

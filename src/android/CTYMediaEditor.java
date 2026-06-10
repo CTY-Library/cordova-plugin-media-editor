@@ -96,6 +96,16 @@ public class CTYMediaEditor extends CordovaPlugin {
 
         this.callback = callbackContext;
 
+        if (action.equals("hasPermission")) {
+            this.hasPermission(callbackContext);
+            return true;
+        }
+
+        if (action.equals("requestPermission")) {
+            this.requestPermission(callbackContext);
+            return true;
+        }
+
         if (requiresReadPermission(action) && !hasReadPermission(action)) {
             cachePendingRequest(action, args, callbackContext);
             requestReadPermission(action);
@@ -192,6 +202,12 @@ public class CTYMediaEditor extends CordovaPlugin {
 
         String action = pendingAction;
         JSONArray args = pendingArgs;
+
+        if ("requestPermission".equals(action) && !hasSpecialPermissions()) {
+            requestSpecialPermission();
+            return;
+        }
+
         clearPendingRequest();
         try {
             executePendingAction(action, args);
@@ -265,6 +281,30 @@ public class CTYMediaEditor extends CordovaPlugin {
                 || action.equals("getVideoInfo");
     }
 
+    private void hasPermission(CallbackContext callbackContext) {
+        boolean granted = hasReadPermission("transcodeVideo")
+                && hasReadPermission("transcodeAudio")
+                && hasSpecialPermissions();
+        callbackContext.sendPluginResult(new PluginResult(PluginResult.Status.OK, granted));
+    }
+
+    private void requestPermission(CallbackContext callbackContext) {
+        boolean hasAllReadPermissions = hasReadPermission("transcodeVideo") && hasReadPermission("transcodeAudio");
+        if (hasAllReadPermissions && hasSpecialPermissions()) {
+            callbackContext.success();
+            return;
+        }
+
+        cachePendingRequest("requestPermission", new JSONArray(), callbackContext);
+
+        if (!hasAllReadPermissions) {
+            requestReadPermission("requestPermission");
+            return;
+        }
+
+        requestSpecialPermission();
+    }
+
     private boolean hasReadPermission(String action) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             return PermissionHelper.hasPermission(this, getReadPermissionForAction(action));
@@ -274,6 +314,12 @@ public class CTYMediaEditor extends CordovaPlugin {
 
     private void requestReadPermission(String action) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (action.equals("requestPermission")) {
+                PermissionHelper.requestPermissions(this, REQUEST_CODE_READ_VIDEO,
+                        new String[] { Manifest.permission.READ_MEDIA_VIDEO, Manifest.permission.READ_MEDIA_AUDIO });
+                return;
+            }
+
             String permission = getReadPermissionForAction(action);
             int requestCode = action.equals("transcodeAudio") ? REQUEST_CODE_READ_AUDIO : REQUEST_CODE_READ_VIDEO;
             PermissionHelper.requestPermission(this, requestCode, permission);
@@ -332,6 +378,8 @@ public class CTYMediaEditor extends CordovaPlugin {
                 this.createThumbnail(args);
             } else if (action.equals("getVideoInfo")) {
                 this.getVideoInfo(args);
+            } else if (action.equals("requestPermission")) {
+                callback.success();
             }
         } catch (IOException e) {
             callback.error(e.toString());

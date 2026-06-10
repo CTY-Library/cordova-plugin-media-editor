@@ -17,7 +17,55 @@ cordova plugin add cordova-plugin-media-editor
 ```
 `CTYMediaEditor`  will be available in the window after deviceready.
 
+### iOS permission preferences
+
+You can customize iOS photo permission text during install:
+
+```bash
+cordova plugin add cordova-plugin-media-editor \
+    --variable PHOTO_LIBRARY_USAGE_DESCRIPTION="Allow access to your photo library." \
+    --variable PHOTO_LIBRARY_ADD_USAGE_DESCRIPTION="Allow saving media to your photo library."
+```
+
 ## Usage
+
+### Permission APIs
+
+Call these before transcode/createThumbnail/getVideoInfo when needed.
+
+```javascript
+CTYMediaEditor.hasPermission(function(granted) {
+    console.log('hasPermission:', granted);
+}, function(err) {
+    console.log('hasPermission error:', err);
+});
+
+CTYMediaEditor.requestPermission(function(granted) {
+    // iOS returns true/false. Android success callback means granted.
+    console.log('requestPermission success:', granted);
+}, function(err) {
+    console.log('requestPermission error:', err);
+});
+```
+
+Typical flow:
+
+```javascript
+CTYMediaEditor.hasPermission(function(granted) {
+    if (granted) {
+        startMediaWork();
+        return;
+    }
+
+    CTYMediaEditor.requestPermission(function() {
+        startMediaWork();
+    }, function(err) {
+        console.log('permission denied:', err);
+    });
+}, function(err) {
+    console.log('permission check failed:', err);
+});
+```
 
 ### Transcode a video
 

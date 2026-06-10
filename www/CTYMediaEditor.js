@@ -10,6 +10,14 @@ var pluginName = 'CTYMediaEditor';
 
 function CTYMediaEditor() {}
 
+CTYMediaEditor.prototype.hasPermission = function(success, error) {
+  exec(success, error, pluginName, 'hasPermission', []);
+};
+
+CTYMediaEditor.prototype.requestPermission = function(success, error) {
+  exec(success, error, pluginName, 'requestPermission', []);
+};
+
 CTYMediaEditor.prototype.transcodeVideo = function(success, error, options) {
   var self = this;
   var win = function(result) {

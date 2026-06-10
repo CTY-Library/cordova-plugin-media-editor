@@ -120,6 +120,22 @@ declare interface CTYMediaEditorVideoInfoDetails {
  */
 interface CTYMediaEditor {
     /**
+     * Checks whether media library permission is already granted.
+     * @param onSuccess Success callback function invoked with true or false.
+     * @param onError Error callback function, invoked when an error occurs.
+     */
+    hasPermission(onSuccess: (granted: boolean) => void,
+        onError: (error: any) => void): void;
+
+    /**
+     * Requests media library permission.
+     * @param onSuccess Success callback function invoked when permission request completes.
+     * @param onError Error callback function, invoked when an error occurs.
+     */
+    requestPermission(onSuccess: (granted?: boolean) => void,
+        onError: (error: any) => void): void;
+
+    /**
     * The CTYMediaEditor.transcode method executes asynchronously, encoding a video at a location
     * and returning the full path. Options can be set to change how the video is encoded. The resulting string 
     * is passed to the onSuccess callback function specified by the onSuccess parameter.
