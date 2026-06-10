@@ -8,7 +8,6 @@
 
 #import <Foundation/Foundation.h>
 #import <AVFoundation/AVFoundation.h>
-#import <AssetsLibrary/ALAssetsLibrary.h>
 #import <MediaPlayer/MediaPlayer.h>
 
 #import <Cordova/CDV.h>

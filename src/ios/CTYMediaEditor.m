@@ -770,7 +770,7 @@ static CDVPluginResult *pluginResult = nil;
 
         switch ([exportSession status]) {
             case AVAssetExportSessionStatusCompleted:
-                NSLog(@"[Trim]: Export Complete %d %@", exportSession.status, exportSession.error);
+                NSLog(@"[Trim]: Export Complete %ld %@", (long)exportSession.status, exportSession.error);
                 [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:videoOutput] callbackId:command.callbackId];
                 break;
             case AVAssetExportSessionStatusFailed:
@@ -795,11 +795,11 @@ static CDVPluginResult *pluginResult = nil;
 
     if ([srcVideoPath rangeOfString:@"://"].location == NSNotFound)
     {
-        url = [NSURL URLWithString:[[@"file://localhost" stringByAppendingString:srcVideoPath] stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding]];
+        url = [NSURL URLWithString:[self percentEncodeURLString:[@"file://localhost" stringByAppendingString:srcVideoPath]]];
     }
     else
     {
-        url = [NSURL URLWithString:[srcVideoPath stringByAddingPercentEscapesUsingEncoding: NSUTF8StringEncoding]];
+        url = [NSURL URLWithString:[self percentEncodeURLString:srcVideoPath]];
     }
 
     AVAsset *asset = [AVAsset assetWithURL:url];
@@ -858,12 +858,23 @@ static CDVPluginResult *pluginResult = nil;
     }
     
     if ([filePath containsString:@"assets-library://"]) {
-        return [NSURL URLWithString:[filePath stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding]];
+        return [NSURL URLWithString:[self percentEncodeURLString:filePath]];
     } else if ([filePath containsString:@"file://"]) {
-        return [NSURL URLWithString:[filePath stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding]];
+        return [NSURL URLWithString:[self percentEncodeURLString:filePath]];
     }
 
-    return [NSURL fileURLWithPath:[filePath stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding]];
+    return [NSURL fileURLWithPath:[self percentEncodeURLString:filePath]];
+}
+
+- (NSString *)percentEncodeURLString:(NSString *)string
+{
+    if (string == nil) {
+        return @"";
+    }
+
+    NSCharacterSet *allowedCharacterSet = [NSCharacterSet characterSetWithCharactersInString:@"!*'();:@&=+$,/?%#[]ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.~"];
+    NSString *encodedString = [string stringByAddingPercentEncodingWithAllowedCharacters:allowedCharacterSet];
+    return encodedString ?: string;
 }
 
 static dispatch_time_t getDispatchTimeFromSeconds(float seconds) {

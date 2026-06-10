@@ -55,7 +55,6 @@
 
         <source-file src="src/ios/libs/libmp3lame/libmp3lame.a" framework="true" />  
         
-        <framework src="AssetsLibrary.framework" />
         <framework src="AVFoundation.framework" />
         <framework src="MediaPlayer.framework" />
         <framework src="CoreVideo.framework" />
