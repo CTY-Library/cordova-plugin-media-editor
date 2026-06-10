@@ -18,6 +18,10 @@ CTYMediaEditor.prototype.requestPermission = function(success, error) {
   exec(success, error, pluginName, 'requestPermission', []);
 };
 
+CTYMediaEditor.prototype.openAppSettings = function(success, error) {
+  exec(success, error, pluginName, 'openAppSettings', []);
+};
+
 CTYMediaEditor.prototype.transcodeVideo = function(success, error, options) {
   var self = this;
   var win = function(result) {

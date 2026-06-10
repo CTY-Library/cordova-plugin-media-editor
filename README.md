@@ -41,12 +41,36 @@ CTYMediaEditor.hasPermission(function(granted) {
 });
 
 CTYMediaEditor.requestPermission(function(granted) {
-    // iOS returns true/false. Android success callback means granted.
+    // success means granted. Denial returns an error object with code/message.
     console.log('requestPermission success:', granted);
 }, function(err) {
     console.log('requestPermission error:', err);
 });
+
+CTYMediaEditor.openAppSettings(function() {
+    console.log('settings opened');
+}, function(err) {
+    console.log('open settings error:', err);
+});
 ```
+
+### Android permissions
+
+The plugin checks permissions at runtime before it starts media processing.
+
+- On Android 13 and later, it requests `READ_MEDIA_VIDEO` for video workflows and `READ_MEDIA_AUDIO` for audio workflows.
+- On Android 12 and below, it falls back to `READ_EXTERNAL_STORAGE`.
+- If an operation needs special write access, the plugin also uses `WRITE_SETTINGS` and, on Android 11+, `MANAGE_EXTERNAL_STORAGE`.
+- If the user has permanently denied access, call `requestPermission` again only after sending them to system settings.
+- `requestPermission` returns an error object shaped like `{ code, message }` when permission is denied, so front-end code can branch on `PERMISSION_DENIED_FIRST_TIME` and `PERMISSION_DENIED_NEED_SETTINGS`.
+- `openAppSettings` opens the app settings page so the user can manually enable permissions.
+
+### iOS permissions
+
+- The plugin uses `PHPhotoLibrary` authorization for photo library access.
+- On iOS 14 and later, it requests add-only access when saving media to the library is enough.
+- `hasPermission` and `requestPermission` reflect the current photo library authorization state.
+- Denied responses use structured error codes so the front end can decide whether to re-prompt or send the user to settings.
 
 Typical flow:
 

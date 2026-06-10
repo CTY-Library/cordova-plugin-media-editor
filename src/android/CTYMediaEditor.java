@@ -51,6 +51,8 @@ import android.util.Log;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 
 import com.linkedin.android.litr.MediaTransformer;
 import com.linkedin.android.litr.MimeType;
@@ -78,10 +80,17 @@ public class CTYMediaEditor extends CordovaPlugin {
     private static final int REQUEST_CODE_WRITE_SETTINGS = 4103;
     private static final int REQUEST_CODE_MANAGE_EXTERNAL_STORAGE = 4104;
 
+    private static final String ERROR_PERMISSION_DENIED_FIRST_TIME = "PERMISSION_DENIED_FIRST_TIME";
+    private static final String ERROR_PERMISSION_DENIED_NEED_SETTINGS = "PERMISSION_DENIED_NEED_SETTINGS";
+    private static final String ERROR_PERMISSION_RESTRICTED = "PERMISSION_RESTRICTED";
+    private static final String ERROR_PERMISSION_STATE_UNRESOLVED = "PERMISSION_STATE_UNRESOLVED";
+    private static final String ERROR_OPEN_SETTINGS_FAILED = "OPEN_SETTINGS_FAILED";
+
     private CallbackContext callback;
     private CallbackContext pendingCallback;
     private String pendingAction;
     private JSONArray pendingArgs;
+    private String[] currentRequestedPermissions = new String[0];
 
     @RequiresApi(api = Build.VERSION_CODES.M)
     @Override
@@ -103,6 +112,11 @@ public class CTYMediaEditor extends CordovaPlugin {
 
         if (action.equals("requestPermission")) {
             this.requestPermission(callbackContext);
+            return true;
+        }
+
+        if (action.equals("openAppSettings")) {
+            this.openAppSettings(callbackContext);
             return true;
         }
 
@@ -183,14 +197,14 @@ public class CTYMediaEditor extends CordovaPlugin {
 
         if (grantResults == null || grantResults.length == 0) {
             clearPendingRequest();
-            cb.error("读取媒体文件权限被拒绝");
+            sendPermissionDeniedError(cb);
             return;
         }
 
         for (int grantResult : grantResults) {
             if (grantResult == PackageManager.PERMISSION_DENIED) {
                 clearPendingRequest();
-                cb.error("读取媒体文件权限被拒绝");
+                sendPermissionDeniedError(cb);
                 return;
             }
         }
@@ -305,6 +319,38 @@ public class CTYMediaEditor extends CordovaPlugin {
         requestSpecialPermission();
     }
 
+    private void sendPermissionDeniedError(CallbackContext callbackContext) {
+        if (callbackContext == null) {
+            return;
+        }
+
+        String[] permissions = currentRequestedPermissions != null && currentRequestedPermissions.length > 0
+                ? currentRequestedPermissions
+                : new String[] { Manifest.permission.READ_EXTERNAL_STORAGE };
+
+        String code;
+        String message;
+        if (hasSpecialPermissions()) {
+            code = ERROR_PERMISSION_DENIED_NEED_SETTINGS;
+            message = "Permission denied. Please open app settings and enable the required permissions.";
+        } else if (shouldPromptToOpenSettings(permissions)) {
+            code = ERROR_PERMISSION_DENIED_NEED_SETTINGS;
+            message = "Permission denied. Please open app settings and enable the required permissions.";
+        } else {
+            code = ERROR_PERMISSION_DENIED_FIRST_TIME;
+            message = "Permission denied.";
+        }
+
+        JSONObject payload = new JSONObject();
+        try {
+            payload.put("code", code);
+            payload.put("message", message);
+            callbackContext.sendPluginResult(new PluginResult(PluginResult.Status.ERROR, payload));
+        } catch (JSONException e) {
+            callbackContext.error(code);
+        }
+    }
+
     private boolean hasReadPermission(String action) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             return PermissionHelper.hasPermission(this, getReadPermissionForAction(action));
@@ -315,15 +361,17 @@ public class CTYMediaEditor extends CordovaPlugin {
     private void requestReadPermission(String action) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (action.equals("requestPermission")) {
-                PermissionHelper.requestPermissions(this, REQUEST_CODE_READ_VIDEO,
-                        new String[] { Manifest.permission.READ_MEDIA_VIDEO, Manifest.permission.READ_MEDIA_AUDIO });
+                currentRequestedPermissions = new String[] { Manifest.permission.READ_MEDIA_VIDEO, Manifest.permission.READ_MEDIA_AUDIO };
+                PermissionHelper.requestPermissions(this, REQUEST_CODE_READ_VIDEO, currentRequestedPermissions);
                 return;
             }
 
             String permission = getReadPermissionForAction(action);
             int requestCode = action.equals("transcodeAudio") ? REQUEST_CODE_READ_AUDIO : REQUEST_CODE_READ_VIDEO;
+            currentRequestedPermissions = new String[] { permission };
             PermissionHelper.requestPermission(this, requestCode, permission);
         } else {
+            currentRequestedPermissions = new String[] { Manifest.permission.READ_EXTERNAL_STORAGE };
             PermissionHelper.requestPermission(this, REQUEST_CODE_READ_VIDEO, Manifest.permission.READ_EXTERNAL_STORAGE);
         }
     }
@@ -365,6 +413,41 @@ public class CTYMediaEditor extends CordovaPlugin {
             Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
                     Uri.parse("package:" + cordova.getActivity().getPackageName()));
             cordova.startActivityForResult(this, intent, REQUEST_CODE_MANAGE_EXTERNAL_STORAGE);
+        }
+    }
+
+    private boolean shouldPromptToOpenSettings(String[] permissions) {
+        if (cordova == null || cordova.getActivity() == null || permissions == null || permissions.length == 0) {
+            return false;
+        }
+
+        for (String permission : permissions) {
+            if (ContextCompat.checkSelfPermission(cordova.getActivity(), permission) != PackageManager.PERMISSION_GRANTED
+                    && ActivityCompat.shouldShowRequestPermissionRationale(cordova.getActivity(), permission)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private void openAppSettings(CallbackContext callbackContext) {
+        try {
+            Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+            Uri uri = Uri.fromParts("package", cordova.getActivity().getPackageName(), null);
+            intent.setData(uri);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            cordova.getActivity().startActivity(intent);
+            callbackContext.success();
+        } catch (Exception e) {
+            JSONObject payload = new JSONObject();
+            try {
+                payload.put("code", ERROR_OPEN_SETTINGS_FAILED);
+                payload.put("message", "Could not open app settings.");
+                callbackContext.sendPluginResult(new PluginResult(PluginResult.Status.ERROR, payload));
+            } catch (JSONException jsonException) {
+                callbackContext.error(ERROR_OPEN_SETTINGS_FAILED);
+            }
         }
     }
 

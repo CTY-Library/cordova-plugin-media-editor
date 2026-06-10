@@ -22,6 +22,11 @@
 
 static NSString* myAsyncCallBackId = nil;
 static CDVPluginResult *pluginResult = nil;
+static NSString * const CTYMediaEditorErrorPermissionDeniedFirstTime = @"PERMISSION_DENIED_FIRST_TIME";
+static NSString * const CTYMediaEditorErrorPermissionDeniedNeedSettings = @"PERMISSION_DENIED_NEED_SETTINGS";
+static NSString * const CTYMediaEditorErrorPermissionRestricted = @"PERMISSION_RESTRICTED";
+static NSString * const CTYMediaEditorErrorPermissionStateUnresolved = @"PERMISSION_STATE_UNRESOLVED";
+static NSString * const CTYMediaEditorErrorOpenSettingsFailed = @"OPEN_SETTINGS_FAILED";
 
 - (PHAuthorizationStatus)photoAuthorizationStatus
 {
@@ -62,6 +67,27 @@ static CDVPluginResult *pluginResult = nil;
     [self.commandDelegate sendPluginResult:result callbackId:command.callbackId];
 }
 
+- (CDVPluginResult*)permissionErrorResultWithCode:(NSString*)code message:(NSString*)message
+{
+    NSDictionary* payload = @{ @"code": code, @"message": message };
+    return [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsDictionary:payload];
+}
+
+- (void)sendPermissionErrorWithCode:(NSString*)code callbackId:(NSString*)callbackId
+{
+    NSString* message = @"Access to photo library is denied.";
+    if ([code isEqualToString:CTYMediaEditorErrorPermissionDeniedNeedSettings]) {
+        message = @"Access to photo library is denied. Please open app settings and enable the required permissions.";
+    } else if ([code isEqualToString:CTYMediaEditorErrorPermissionRestricted]) {
+        message = @"Access to photo library is restricted by system policy.";
+    } else if ([code isEqualToString:CTYMediaEditorErrorPermissionStateUnresolved]) {
+        message = @"Permission request did not resolve to an authorized state.";
+    }
+
+    CDVPluginResult* result = [self permissionErrorResultWithCode:code message:message];
+    [self.commandDelegate sendPluginResult:result callbackId:callbackId];
+}
+
 - (void)requestPermission:(CDVInvokedUrlCommand*)command
 {
     PHAuthorizationStatus status = [self photoAuthorizationStatus];
@@ -71,19 +97,68 @@ static CDVPluginResult *pluginResult = nil;
         return;
     }
 
-    if (status == PHAuthorizationStatusDenied || status == PHAuthorizationStatusRestricted) {
-        NSString *message = @"Access to photo library is denied or restricted.";
-        CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:message];
+    if (status == PHAuthorizationStatusRestricted) {
+        [self sendPermissionErrorWithCode:CTYMediaEditorErrorPermissionRestricted callbackId:command.callbackId];
+        return;
+    }
+
+    if (status == PHAuthorizationStatusDenied) {
+        [self sendPermissionErrorWithCode:CTYMediaEditorErrorPermissionDeniedNeedSettings callbackId:command.callbackId];
+        return;
+    }
+
+    PHAuthorizationStatus initialStatus = status;
+    [self requestPhotoLibraryAuthorization:^(PHAuthorizationStatus requestStatus) {
+        BOOL granted = [self isPhotoAuthorizationGranted:requestStatus];
+        if (granted) {
+            CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsBool:YES];
+            [self.commandDelegate sendPluginResult:result callbackId:command.callbackId];
+            return;
+        }
+
+        if (requestStatus == PHAuthorizationStatusRestricted) {
+            [self sendPermissionErrorWithCode:CTYMediaEditorErrorPermissionRestricted callbackId:command.callbackId];
+            return;
+        }
+
+        if (requestStatus == PHAuthorizationStatusDenied) {
+            NSString* code = initialStatus == PHAuthorizationStatusNotDetermined
+                ? CTYMediaEditorErrorPermissionDeniedFirstTime
+                : CTYMediaEditorErrorPermissionDeniedNeedSettings;
+            [self sendPermissionErrorWithCode:code callbackId:command.callbackId];
+            return;
+        }
+
+        [self sendPermissionErrorWithCode:CTYMediaEditorErrorPermissionStateUnresolved callbackId:command.callbackId];
+    }];
+}
+
+- (void)openAppSettings:(CDVInvokedUrlCommand*)command
+{
+    NSURL* url = [NSURL URLWithString:UIApplicationOpenSettingsURLString];
+    if (url == nil) {
+        CDVPluginResult* result = [self permissionErrorResultWithCode:CTYMediaEditorErrorOpenSettingsFailed message:@"Could not build app settings URL."];
         [self.commandDelegate sendPluginResult:result callbackId:command.callbackId];
         return;
     }
 
-    [self requestPhotoLibraryAuthorization:^(PHAuthorizationStatus requestStatus) {
-        BOOL granted = [self isPhotoAuthorizationGranted:requestStatus];
-        CDVCommandStatus commandStatus = granted ? CDVCommandStatus_OK : CDVCommandStatus_ERROR;
-        CDVPluginResult* result = [CDVPluginResult resultWithStatus:commandStatus messageAsBool:granted];
+    if (@available(iOS 10.0, *)) {
+        [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:^(BOOL success) {
+            CDVPluginResult* result = success
+                ? [CDVPluginResult resultWithStatus:CDVCommandStatus_OK]
+                : [self permissionErrorResultWithCode:CTYMediaEditorErrorOpenSettingsFailed message:@"Could not open app settings."];
+            [self.commandDelegate sendPluginResult:result callbackId:command.callbackId];
+        }];
+    } else {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+        BOOL success = [[UIApplication sharedApplication] openURL:url];
+#pragma clang diagnostic pop
+        CDVPluginResult* result = success
+            ? [CDVPluginResult resultWithStatus:CDVCommandStatus_OK]
+            : [self permissionErrorResultWithCode:CTYMediaEditorErrorOpenSettingsFailed message:@"Could not open app settings."];
         [self.commandDelegate sendPluginResult:result callbackId:command.callbackId];
-    }];
+    }
 }
 
 /**

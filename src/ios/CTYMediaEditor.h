@@ -28,6 +28,7 @@ typedef NSUInteger CTYOutputFileType;
 - (void)transcodeVideo:(CDVInvokedUrlCommand*)command;
 - (void)hasPermission:(CDVInvokedUrlCommand*)command;
 - (void)requestPermission:(CDVInvokedUrlCommand*)command;
+- (void)openAppSettings:(CDVInvokedUrlCommand*)command;
 - (void) trim:(CDVInvokedUrlCommand*)command;
 - (void) createThumbnail:(CDVInvokedUrlCommand*)command;
 - (void) getVideoInfo:(CDVInvokedUrlCommand*)command;
