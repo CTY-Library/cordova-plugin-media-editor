@@ -63,8 +63,8 @@ The plugin checks permissions at runtime before it starts media processing.
 - If an operation needs special write access, the plugin also uses `WRITE_SETTINGS` and, on Android 11+, `MANAGE_EXTERNAL_STORAGE`.
 - If the user has permanently denied access, call `requestPermission` again only after sending them to system settings.
 - `requestPermission` returns an error object shaped like `{ code, message }` when permission is denied.
-- `PERMISSION_DENIED_FIRST_TIME` means a first-time denial or a dismissed permission dialog.
-- `PERMISSION_DENIED_NEED_SETTINGS` means access is still denied after at least one prior request and the app should guide users to system settings.
+- `PERMISSION_DENIED_FIRST_TIME` means permission is denied but the app can still re-request it in-app.
+- `PERMISSION_DENIED_NEED_SETTINGS` means permission cannot be resolved in the current flow (including dismissed dialog), so guide users to system settings.
 - `openAppSettings` opens the app settings page so the user can manually enable permissions.
 
 ### iOS permissions
