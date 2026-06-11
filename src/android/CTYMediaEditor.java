@@ -433,12 +433,12 @@ public class CTYMediaEditor extends CordovaPlugin {
 
         for (String permission : permissions) {
             if (ContextCompat.checkSelfPermission(cordova.getActivity(), permission) != PackageManager.PERMISSION_GRANTED
-                    && ActivityCompat.shouldShowRequestPermissionRationale(cordova.getActivity(), permission)) {
-                return false;
+                    && !ActivityCompat.shouldShowRequestPermissionRationale(cordova.getActivity(), permission)) {
+                return true;
             }
         }
 
-        return true;
+        return false;
     }
 
     private void openAppSettings(CallbackContext callbackContext) {
