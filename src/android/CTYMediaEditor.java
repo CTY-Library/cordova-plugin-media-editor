@@ -80,6 +80,9 @@ public class CTYMediaEditor extends CordovaPlugin {
     private static final int REQUEST_CODE_WRITE_SETTINGS = 4103;
     private static final int REQUEST_CODE_MANAGE_EXTERNAL_STORAGE = 4104;
 
+    private static final String PREFS_NAME = "cordova_media_editor";
+    private static final String PREF_KEY_READ_PERMISSION_REQUESTED = "read_permission_requested";
+
     private static final String ERROR_PERMISSION_DENIED_FIRST_TIME = "PERMISSION_DENIED_FIRST_TIME";
     private static final String ERROR_PERMISSION_DENIED_NEED_SETTINGS = "PERMISSION_DENIED_NEED_SETTINGS";
     private static final String ERROR_PERMISSION_RESTRICTED = "PERMISSION_RESTRICTED";
@@ -181,6 +184,10 @@ public class CTYMediaEditor extends CordovaPlugin {
             return;
         }
 
+        boolean hasGrantResult = grantResults != null && grantResults.length > 0;
+        boolean requestedBefore = hasRequestedReadPermissionBefore();
+        markReadPermissionRequested();
+
         CallbackContext cb = pendingCallback != null ? pendingCallback : callback;
         if (cb == null) {
             clearPendingRequest();
@@ -195,16 +202,16 @@ public class CTYMediaEditor extends CordovaPlugin {
         }
         this.callback = cb;
 
-        if (grantResults == null || grantResults.length == 0) {
+        if (!hasGrantResult) {
             clearPendingRequest();
-            sendPermissionDeniedError(cb);
+            sendPermissionDeniedError(cb, false, requestedBefore);
             return;
         }
 
         for (int grantResult : grantResults) {
             if (grantResult == PackageManager.PERMISSION_DENIED) {
                 clearPendingRequest();
-                sendPermissionDeniedError(cb);
+                sendPermissionDeniedError(cb, true, requestedBefore);
                 return;
             }
         }
@@ -319,8 +326,15 @@ public class CTYMediaEditor extends CordovaPlugin {
         requestSpecialPermission();
     }
 
-    private void sendPermissionDeniedError(CallbackContext callbackContext) {
+    private void sendPermissionDeniedError(CallbackContext callbackContext, boolean hasGrantResult, boolean requestedBefore) {
         if (callbackContext == null) {
+            return;
+        }
+
+        if (!hasGrantResult) {
+            sendPermissionError(callbackContext,
+                    ERROR_PERMISSION_DENIED_FIRST_TIME,
+                    "Permission dialog was dismissed.");
             return;
         }
 
@@ -330,10 +344,7 @@ public class CTYMediaEditor extends CordovaPlugin {
 
         String code;
         String message;
-        if (hasSpecialPermissions()) {
-            code = ERROR_PERMISSION_DENIED_NEED_SETTINGS;
-            message = "Permission denied. Please open app settings and enable the required permissions.";
-        } else if (shouldPromptToOpenSettings(permissions)) {
+        if (requestedBefore && shouldPromptToOpenSettings(permissions)) {
             code = ERROR_PERMISSION_DENIED_NEED_SETTINGS;
             message = "Permission denied. Please open app settings and enable the required permissions.";
         } else {
@@ -341,6 +352,10 @@ public class CTYMediaEditor extends CordovaPlugin {
             message = "Permission denied.";
         }
 
+        sendPermissionError(callbackContext, code, message);
+    }
+
+    private void sendPermissionError(CallbackContext callbackContext, String code, String message) {
         JSONObject payload = new JSONObject();
         try {
             payload.put("code", code);
@@ -349,6 +364,20 @@ public class CTYMediaEditor extends CordovaPlugin {
         } catch (JSONException e) {
             callbackContext.error(code);
         }
+    }
+
+    private boolean hasRequestedReadPermissionBefore() {
+        return cordova.getActivity()
+                .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .getBoolean(PREF_KEY_READ_PERMISSION_REQUESTED, false);
+    }
+
+    private void markReadPermissionRequested() {
+        cordova.getActivity()
+                .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean(PREF_KEY_READ_PERMISSION_REQUESTED, true)
+                .apply();
     }
 
     private boolean hasReadPermission(String action) {
