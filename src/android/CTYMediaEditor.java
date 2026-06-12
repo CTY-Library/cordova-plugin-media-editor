@@ -328,8 +328,8 @@ public class CTYMediaEditor extends CordovaPlugin {
 
         if (!hasGrantResult) {
             sendPermissionError(callbackContext,
-                    ERROR_PERMISSION_DENIED_NEED_SETTINGS,
-                    "Permission denied. Please open app settings and enable the required permissions.");
+                    ERROR_PERMISSION_DENIED_FIRST_TIME,
+                    "Permission request dismissed.");
             return;
         }
 
