@@ -274,6 +274,11 @@ static NSString * const CTYMediaEditorErrorOpenSettingsFailed = @"OPEN_SETTINGS_
     NSURL *outputURL = [NSURL fileURLWithPath:outputPath];
 
     NSArray *tracks = [avAsset tracksWithMediaType:AVMediaTypeVideo];
+    if (tracks.count == 0) {
+        NSString *error = @"No video track found. Please check fileUri and ensure the source is a valid video file.";
+        [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:error] callbackId:command.callbackId];
+        return;
+    }
     AVAssetTrack *track = [tracks objectAtIndex:0];
     CGSize mediaSize = track.naturalSize;
 
@@ -768,6 +773,11 @@ static NSString * const CTYMediaEditorErrorOpenSettingsFailed = @"OPEN_SETTINGS_
     AVURLAsset *avAsset = [AVURLAsset URLAssetWithURL:fileURL options:nil];
 
     NSArray *tracks = [avAsset tracksWithMediaType:AVMediaTypeVideo];
+    if (tracks.count == 0) {
+        NSString *error = @"No video track found. Please check fileUri and ensure the source is a valid video file.";
+        [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:error] callbackId:command.callbackId];
+        return;
+    }
     AVAssetTrack *track = [tracks objectAtIndex:0];
     CGSize mediaSize = track.naturalSize;
 
@@ -977,7 +987,12 @@ static NSString * const CTYMediaEditorErrorOpenSettingsFailed = @"OPEN_SETTINGS_
 // inspired by http://stackoverflow.com/a/6046421/1673842
 - (NSString*)getOrientationForTrack:(AVAsset *)asset
 {
-    AVAssetTrack *videoTrack = [[asset tracksWithMediaType:AVMediaTypeVideo] objectAtIndex:0];
+    NSArray *videoTracks = [asset tracksWithMediaType:AVMediaTypeVideo];
+    if (videoTracks.count == 0) {
+        return @"landscape";
+    }
+
+    AVAssetTrack *videoTrack = [videoTracks objectAtIndex:0];
     CGSize size = [videoTrack naturalSize];
     CGAffineTransform txf = [videoTrack preferredTransform];
 
